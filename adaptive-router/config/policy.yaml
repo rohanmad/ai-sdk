@@ -1,0 +1,36 @@
+# Developer-defined routing policy rules.
+# Hard rules are non-overridable by the routing engine.
+
+hard_rules:
+  never_cloud_for_high_sensitivity: true
+
+thresholds:
+  complexity:
+    low_max: 0.45
+    high_min: 0.55
+
+targets:
+  low_complexity_low_sensitivity: small_local
+  low_complexity_high_sensitivity: small_local
+  high_complexity_low_sensitivity: cloud
+  high_complexity_high_sensitivity: large_local
+
+models:
+  small_local:
+    provider: local
+    model_id: small
+    # Path to GGUF model (llama.cpp). Leave empty to use mock mode.
+    path: ""
+  large_local:
+    provider: local
+    model_id: large
+    path: ""
+  cloud:
+    provider: openai
+    model_id: gpt-4o-mini
+
+# Step 1 dumb routing override (remove once real classifiers are wired)
+dumb_routing:
+  enabled: true
+  # Route prompts longer than this char count to cloud (if sensitivity allows)
+  cloud_char_threshold: 500

@@ -1,0 +1,17 @@
+pyyaml>=6.0
+
+[all]
+adaptive-router[cloud,dev,local,ml]
+
+[cloud]
+openai>=1.0.0
+
+[dev]
+pytest>=7.0.0
+
+[local]
+llama-cpp-python>=0.2.0
+
+[ml]
+scikit-learn>=1.3.0
+pandas>=2.0.0
