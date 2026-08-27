@@ -1,0 +1,155 @@
+# short factual (50)
+What is the capital of Japan?
+How many continents are there?
+What is 15 multiplied by 8?
+Who wrote Romeo and Juliet?
+What is the chemical symbol for gold?
+How many days are in a leap year?
+What planet is closest to the Sun?
+What is the largest ocean on Earth?
+Who painted the Mona Lisa?
+What is the boiling point of water in Celsius?
+How many sides does a hexagon have?
+What year did World War II end?
+What is the speed of light in vacuum?
+What is the tallest mountain in the world?
+How many bytes are in a kilobyte?
+What language is spoken in Brazil?
+What is the square root of 144?
+Who invented the telephone?
+What is H2O commonly known as?
+How many planets are in our solar system?
+What is the currency of the United Kingdom?
+What color do you get by mixing red and blue?
+How many minutes are in three hours?
+What is the capital of Australia?
+Who was the first president of the United States?
+What is the freezing point of water in Fahrenheit?
+How many legs does a spider have?
+What is the largest mammal?
+What gas do plants absorb from the atmosphere?
+How many states are in the United States?
+What is the smallest prime number?
+Who developed the theory of relativity?
+What is the main ingredient in bread?
+How many hours are in a day?
+What is the capital of Canada?
+What instrument has 88 keys?
+How many centimeters are in one meter?
+What is the chemical formula for table salt?
+Who wrote the Harry Potter series?
+What is the largest country by area?
+How many weeks are in a year?
+What is the primary language of Egypt?
+What is 100 divided by 4?
+What organ pumps blood through the body?
+How many degrees are in a right angle?
+What is the capital of Italy?
+Who discovered penicillin?
+What is the hardest natural substance?
+How many players are on a soccer team?
+What is the atomic number of carbon?
+What is the capital of Spain?
+
+# medium explanatory (50)
+Explain how photosynthesis works in simple terms.
+What is the difference between weather and climate?
+Describe what an API is to a non-technical person.
+How does a refrigerator keep food cold?
+Explain the concept of supply and demand.
+What is machine learning in plain English?
+Describe how vaccines help the immune system.
+What is the difference between RAM and storage?
+Explain how earthquakes happen.
+What does inflation mean for everyday consumers?
+Describe the water cycle briefly.
+How does GPS determine your location?
+Explain what a database index does.
+What is the difference between HTTP and HTTPS?
+Describe how electric cars differ from gas cars.
+Explain what a neural network is at a high level.
+How do compilers turn code into programs?
+What is the purpose of a checksum?
+Explain how interest rates affect borrowing costs.
+Describe what technical debt means in software.
+How does public key encryption work conceptually?
+Explain the difference between precision and recall.
+What happens during a solar eclipse?
+Describe how load balancing improves web apps.
+Explain what technical analysis means in finance.
+How does a hash table provide fast lookups?
+What is the difference between TCP and UDP?
+Explain how a thermostat maintains temperature.
+Describe what technical writing aims to accomplish.
+How does caching reduce latency?
+Explain the role of mitochondria in cells.
+What is the difference between correlation and causation?
+Describe how a CDN speeds up websites.
+Explain what technical interviews typically assess.
+How does noise cancellation work in headphones?
+What is the difference between a stack and a queue?
+Explain how solar panels generate electricity.
+Describe what technical due diligence involves.
+How does a bloom filter save memory?
+Explain the basics of object-oriented programming.
+What is the difference between latency and throughput?
+Describe how firewalls protect networks.
+Explain what technical specifications document.
+How does a binary search algorithm work?
+What is the difference between AI and automation?
+Describe how version control helps teams collaborate.
+Explain what technical risk means in projects.
+How does a message queue decouple services?
+What is the difference between SQL and NoSQL?
+Describe how technical standards improve interoperability.
+
+# multi-step reasoning (50)
+Compare microservices and monoliths for a fintech startup with 10 engineers.
+A user reports slow checkout. List a step-by-step debugging plan.
+Design a rate limiter for an API handling 10k requests per second.
+Given rising cloud costs, propose three ways to reduce inference spend.
+Analyze tradeoffs between SQL and NoSQL for an analytics dashboard.
+Debug why a CI pipeline passes locally but fails in GitHub Actions.
+Compare on-device inference vs cloud inference for a health app.
+Plan a migration from REST to gRPC for five internal services.
+Evaluate whether to build or buy an authentication service.
+Trace through why a binary search might return wrong index on duplicates.
+Design a caching strategy for a read-heavy product catalog.
+Compare batch vs streaming ETL for nightly reporting jobs.
+Analyze security risks of storing PII in application logs.
+Propose an architecture for offline-first mobile sync.
+Debug a memory leak that appears only after 24 hours of uptime.
+Compare event-driven vs request-response for order processing.
+Design a rollout plan for a breaking API version change.
+Analyze why gradient boosting might beat logistic regression here.
+Plan how to label training data for a routing classifier.
+Compare synchronous vs asynchronous worker queues for email delivery.
+Design a fallback strategy when the primary LLM provider is down.
+Debug inconsistent A/B test results across mobile and web.
+Analyze tradeoffs of strong vs eventual consistency in carts.
+Propose monitoring metrics for an adaptive inference router.
+Compare feature stores vs ad hoc feature extraction in ML pipelines.
+Design a policy engine that enforces privacy constraints on routing.
+Debug why cosine similarity labels disagree with human judgment.
+Analyze cost-quality tradeoffs for small vs large local models.
+Plan a data collection pipeline comparing model outputs automatically.
+Compare regex PII detection vs NER for a sensitivity gate.
+Design tests for a routing engine with hard privacy rules.
+Debug why a classifier routes too many requests to cloud.
+Analyze when to degrade to a large local model instead of cloud.
+Propose thresholds for low vs high complexity routing bands.
+Compare logistic regression vs gradient boosting for interpretability.
+Design telemetry to explain every routing decision to developers.
+Debug training-serving skew in a complexity classifier.
+Analyze failure modes when small models hallucinate on hard prompts.
+Plan how to validate routing accuracy before production rollout.
+Compare OpenAI-compatible adapters across local and cloud targets.
+Design a 2x2 routing table for complexity and sensitivity signals.
+Debug why sensitive long prompts still hit cloud endpoints.
+Analyze latency budget for regex gate plus classifier plus inference.
+Propose a labeling heuristic using embedding similarity between outputs.
+Compare quantizations Q4_K_M vs Q8_0 for local model quality.
+Design an SDK that hides whether inference ran locally or in cloud.
+Debug shard loading for multi-part GGUF models in llama.cpp.
+Analyze how to keep all seven router tests passing during migration.
+Plan documentation metrics for classifier accuracy and cost savings.

@@ -19,12 +19,11 @@ models:
   small_local:
     provider: local
     model_id: small
-    # Path to GGUF model (llama.cpp). Leave empty to use mock mode.
-    path: ""
+    path: "models/small/qwen2.5-1.5b-instruct-q4_k_m.gguf"
   large_local:
     provider: local
     model_id: large
-    path: ""
+    path: "models/large/qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
   cloud:
     provider: openai
     model_id: gpt-4o-mini

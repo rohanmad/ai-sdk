@@ -1,5 +1,1 @@
 prompt,complexity_label,small_sufficient,large_sufficient,notes
-"What is 2+2?",low,true,true,baseline arithmetic
-"Summarize this email in one sentence.",low,true,true,simple summarization
-"Compare microservices vs monolith for a fintech startup.",high,false,true,multi-factor reasoning
-"Debug this 200-line Python traceback and suggest a fix.",high,false,true,code reasoning

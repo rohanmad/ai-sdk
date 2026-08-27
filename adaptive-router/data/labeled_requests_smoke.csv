@@ -1,0 +1,5 @@
+"prompt","complexity_label","small_sufficient","large_sufficient","notes"
+"What is the capital of Japan?","low","true","true","cosine_sim=0.9895"
+"How many continents are there?","low","true","true","cosine_sim=0.9530"
+"What is 15 multiplied by 8?","low","true","true","cosine_sim=0.9824"
+"Who wrote Romeo and Juliet?","high","false","true","cosine_sim=0.7678"

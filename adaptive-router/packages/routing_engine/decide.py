@@ -119,9 +119,16 @@ def decide(input_data: DecideInput, policy: PolicyConfig) -> DecideOutput:
                 f"(chars={len(input_data.prompt)})"
             )
     else:
-        complexity_score = input_data.complexity_score
+        from packages.complexity_classifier.predict import predict_complexity
+
+        complexity_score, small_sufficient, confidence = predict_complexity(
+            input_data.prompt
+        )
         complexity_level = _complexity_level(complexity_score, policy)
-        reason_prefix = f"complexity_score={complexity_score:.3f}"
+        reason_prefix = (
+            f"classifier:small_sufficient={small_sufficient}; "
+            f"complexity_score={complexity_score:.3f}; confidence={confidence:.3f}"
+        )
 
     target = _policy_target(complexity_level, input_data.sensitivity_flag, policy)
     hard_override, hard_reason = _apply_hard_rules(

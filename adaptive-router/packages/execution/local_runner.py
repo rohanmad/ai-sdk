@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import time
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -73,6 +74,18 @@ class LocalRunner:
             f"[mock-{tier}-local] Response to: {preview} "
             f"(max_tokens={max_tokens})"
         )
+
+    def unload(self, tier: LocalModelTier | None = None) -> None:
+        """Release loaded model(s) to free memory."""
+        if tier is not None:
+            model = self._models.pop(tier, None)
+            if model is not None:
+                del model
+        else:
+            for model in self._models.values():
+                del model
+            self._models.clear()
+        gc.collect()
 
     def generate(
         self,
