@@ -1,4 +1,4 @@
-"""Tests for the adaptive inference router (build step 1)."""
+"""Tests for the adaptive inference router."""
 
 from __future__ import annotations
 
@@ -12,11 +12,18 @@ from packages.sdk.router import Router, RouterConfig
 from packages.sdk.types import GenerateTextRequest
 from packages.sensitivity_gate.rules import check_sensitivity
 
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
+
 
 @pytest.fixture
 def policy() -> PolicyConfig:
-    policy_path = Path(__file__).resolve().parents[1] / "config" / "policy.yaml"
-    return PolicyConfig.load(policy_path)
+    return PolicyConfig.load(CONFIG_DIR / "policy.yaml")
+
+
+@pytest.fixture
+def dumb_policy() -> PolicyConfig:
+    """Policy with character-count routing enabled (for legacy / fallback tests)."""
+    return PolicyConfig.load(CONFIG_DIR / "policy.dumb.yaml")
 
 
 def test_sensitivity_detects_email() -> None:
@@ -31,7 +38,7 @@ def test_sensitivity_ignores_benign_prompt() -> None:
     assert result.matched_rules == []
 
 
-def test_dumb_routing_short_prompt_goes_local(policy: PolicyConfig) -> None:
+def test_dumb_routing_short_prompt_goes_local(dumb_policy: PolicyConfig) -> None:
     output = decide(
         DecideInput(
             prompt="short prompt",
@@ -39,13 +46,13 @@ def test_dumb_routing_short_prompt_goes_local(policy: PolicyConfig) -> None:
             sensitivity_triggers=[],
             complexity_score=0.0,
         ),
-        policy,
+        dumb_policy,
     )
     assert output.target == "small_local"
     assert "dumb_routing" in output.reason
 
 
-def test_dumb_routing_long_prompt_goes_cloud(policy: PolicyConfig) -> None:
+def test_dumb_routing_long_prompt_goes_cloud(dumb_policy: PolicyConfig) -> None:
     output = decide(
         DecideInput(
             prompt="x" * 600,
@@ -53,13 +60,13 @@ def test_dumb_routing_long_prompt_goes_cloud(policy: PolicyConfig) -> None:
             sensitivity_triggers=[],
             complexity_score=0.0,
         ),
-        policy,
+        dumb_policy,
     )
     assert output.target == "cloud"
     assert "dumb_routing" in output.reason
 
 
-def test_sensitive_long_prompt_never_goes_to_cloud(policy: PolicyConfig) -> None:
+def test_sensitive_long_prompt_never_goes_to_cloud(dumb_policy: PolicyConfig) -> None:
     output = decide(
         DecideInput(
             prompt="x" * 600,
@@ -67,7 +74,7 @@ def test_sensitive_long_prompt_never_goes_to_cloud(policy: PolicyConfig) -> None
             sensitivity_triggers=["SSN-shaped pattern detected"],
             complexity_score=0.0,
         ),
-        policy,
+        dumb_policy,
     )
     assert output.target == "large_local"
     assert output.sensitivity_flag is True
@@ -77,9 +84,13 @@ def test_sensitive_long_prompt_never_goes_to_cloud(policy: PolicyConfig) -> None
 def test_router_end_to_end_mock_mode() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "routing.db"
-        policy_path = Path(__file__).resolve().parents[1] / "config" / "policy.yaml"
         router = Router.init(
-            RouterConfig(policy_path=policy_path, telemetry_db=db_path)
+            RouterConfig(
+                policy_path=CONFIG_DIR / "policy.dumb.yaml",
+                telemetry_db=db_path,
+                small_model_path="",
+                large_model_path="",
+            )
         )
 
         short = router.generate_text(
