@@ -6,7 +6,11 @@ import pickle
 from functools import lru_cache
 from pathlib import Path
 
-from packages.complexity_classifier.vectorize import prompt_to_array
+from packages.complexity_classifier.vectorize import (
+    HANDCRAFTED_FEATURE_NAMES,
+    prompt_to_handcrafted_array,
+    prompt_to_array,
+)
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "model.pkl"
 
@@ -38,8 +42,12 @@ def predict_complexity(
 
     model = _load_model(str(path.resolve()))
     n_features = model.coef_.shape[1]
-    use_embeddings = n_features > 6
-    features = prompt_to_array(prompt, use_embeddings=use_embeddings).reshape(1, -1)
+    handcrafted = prompt_to_handcrafted_array(prompt)
+    if n_features <= len(HANDCRAFTED_FEATURE_NAMES):
+        # Support legacy 6-feature models until retrained on 12 features.
+        features = handcrafted[:n_features].reshape(1, -1)
+    else:
+        features = prompt_to_array(prompt, use_embeddings=True).reshape(1, -1)
 
     proba = model.predict_proba(features)[0]
     # Class 0 = small_sufficient False (high complexity), class 1 = True (low)

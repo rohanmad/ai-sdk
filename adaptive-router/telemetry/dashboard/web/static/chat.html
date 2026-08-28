@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive Router — Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body>
+  <div class="page-shell chat-shell">
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand">
+          <span class="brand-prefix">chat</span>
+          <h1>Adaptive Router</h1>
+        </div>
+        <p class="header-desc">Live routing demo — send a prompt, see where it runs</p>
+        <nav class="site-nav" aria-label="Main">
+          <a href="/" class="nav-link">telemetry</a>
+          <a href="/chat" class="nav-link is-active">chat</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="chat-main">
+      <div id="messages" class="messages" aria-live="polite">
+        <div class="msg system">
+          <p>Messages route through the full pipeline: sensitivity gate → classifier → policy → execution. Expand routing details on each reply.</p>
+        </div>
+      </div>
+
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <textarea
+          id="prompt-input"
+          name="prompt"
+          rows="2"
+          placeholder="Type a message…"
+          required
+        ></textarea>
+        <button type="submit" id="send-btn" class="btn-send">send</button>
+      </form>
+    </main>
+
+    <footer class="site-footer">
+      requests logged to <code>telemetry/routing.db</code> · visible on <a href="/">telemetry</a>
+    </footer>
+  </div>
+
+  <script src="/static/chat.js"></script>
+</body>
+</html>

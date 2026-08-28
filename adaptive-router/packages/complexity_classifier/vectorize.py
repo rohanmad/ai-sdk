@@ -19,10 +19,17 @@ HANDCRAFTED_FEATURE_NAMES = (
     "reasoning_keyword_hits",
     "code_block_present",
     "multi_step_hint",
+    "open_ended_starter",
+    "imperative_multi_step",
+    "factual_pattern",
+    "length_bucket_short",
+    "length_bucket_medium",
+    "length_bucket_long",
 )
 
 # Backward-compatible alias
 FEATURE_NAMES = HANDCRAFTED_FEATURE_NAMES
+LEGACY_HANDCRAFTED_DIM = 6
 
 
 def handcrafted_to_array(features: ComplexityFeatures) -> np.ndarray:
@@ -34,6 +41,12 @@ def handcrafted_to_array(features: ComplexityFeatures) -> np.ndarray:
             features.reasoning_keyword_hits,
             int(features.code_block_present),
             int(features.multi_step_hint),
+            int(features.open_ended_starter),
+            int(features.imperative_multi_step),
+            int(features.factual_pattern),
+            int(features.length_bucket_short),
+            int(features.length_bucket_medium),
+            int(features.length_bucket_long),
         ],
         dtype=np.float64,
     )

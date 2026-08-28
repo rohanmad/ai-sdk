@@ -166,6 +166,17 @@ const response = await router.generateText({ prompt: "Hello!" });
 console.log(response.routing.target, response.routing.reason);
 ```
 
+## Sensitivity gate
+
+Regex patterns (email, phone, SSN, credit-card) plus optional spaCy NER for names, locations, and organizations.
+
+```bash
+pip install -e ".[ner]"
+python -m spacy download en_core_web_sm
+```
+
+NER runs additively in `check_sensitivity()` — a prompt is sensitive if regex **or** NER flags it.
+
 ## Telemetry
 
 Every request is logged to `telemetry/routing.db`:
@@ -173,6 +184,7 @@ Every request is logged to `telemetry/routing.db`:
 ```bash
 python -m telemetry.dashboard.cli --mode summary
 python -m telemetry.dashboard.cli --limit 10
+python -m telemetry.dashboard.web.app   # telemetry at /, chat at /chat
 ```
 
 ## Project layout
@@ -181,7 +193,7 @@ python -m telemetry.dashboard.cli --limit 10
 adaptive-router/
 ├── packages/
 │   ├── sdk/                  # Python + TypeScript public API
-│   ├── sensitivity_gate/     # Regex PII rules (v1)
+│   ├── sensitivity_gate/     # Regex PII + spaCy NER
 │   ├── complexity_classifier/# Feature extraction + training (step 5)
 │   ├── routing_engine/       # 2×2 policy logic
 │   └── execution/            # local_runner + cloud_adapter

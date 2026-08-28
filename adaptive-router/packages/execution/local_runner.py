@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from packages.execution.prompt_format import QWEN_STOP_SEQUENCES, format_qwen_instruct_prompt
+
 LocalModelTier = Literal["small", "large"]
 
 
@@ -87,6 +89,37 @@ class LocalRunner:
             self._models.clear()
         gc.collect()
 
+    def _generate_text(
+        self,
+        model: Any,
+        prompt: str,
+        *,
+        max_tokens: int,
+        temperature: float,
+    ) -> tuple[str, dict]:
+        """Run inference with chat template (Qwen instruct models need this)."""
+        if hasattr(model, "create_chat_completion"):
+            output = model.create_chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            choice = output["choices"][0]
+            message = choice.get("message") or {}
+            text = (message.get("content") or choice.get("text") or "").strip()
+            return text, output.get("usage", {})
+
+        formatted = format_qwen_instruct_prompt(prompt)
+        output = model(
+            formatted,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            echo=False,
+            stop=list(QWEN_STOP_SEQUENCES),
+        )
+        text = output["choices"][0]["text"].strip()
+        return text, output.get("usage", {})
+
     def generate(
         self,
         prompt: str,
@@ -113,14 +146,12 @@ class LocalRunner:
                 mock=True,
             )
 
-        output = model(
+        text, usage = self._generate_text(
+            model,
             prompt,
             max_tokens=max_tokens,
             temperature=temperature,
-            echo=False,
         )
-        text = output["choices"][0]["text"].strip()
-        usage = output.get("usage", {})
         prompt_tokens = int(usage.get("prompt_tokens", self._estimate_tokens(prompt)))
         completion_tokens = int(
             usage.get("completion_tokens", self._estimate_tokens(text))

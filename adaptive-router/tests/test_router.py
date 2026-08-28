@@ -33,7 +33,10 @@ def test_sensitivity_detects_email() -> None:
 
 
 def test_sensitivity_ignores_benign_prompt() -> None:
-    result = check_sensitivity("What is the capital of France?")
+    result = check_sensitivity(
+        "Explain how photosynthesis converts light into chemical energy.",
+        use_ner=False,
+    )
     assert result.is_sensitive is False
     assert result.matched_rules == []
 

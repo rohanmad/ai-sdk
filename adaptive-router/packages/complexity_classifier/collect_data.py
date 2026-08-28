@@ -58,13 +58,6 @@ def load_prompts(path: Path) -> list[str]:
     return lines
 
 
-def format_instruct_prompt(prompt: str) -> str:
-    return (
-        f"<|im_start|>user\n{prompt}\n"
-        f"<|im_start|>assistant\n"
-    )
-
-
 def load_encoder():
     from sentence_transformers import SentenceTransformer
 
@@ -128,10 +121,9 @@ def collect(
             print(f"[{i}/{total}] skip existing", flush=True)
             continue
 
-        formatted = format_instruct_prompt(prompt)
         print(f"[{i}/{total}] running small model...", flush=True)
         small_out = runner.generate(
-            formatted, tier="small", max_tokens=max_tokens, temperature=0.1
+            prompt, tier="small", max_tokens=max_tokens, temperature=0.1
         )
         if small_out.mock:
             raise RuntimeError("Small model fell back to mock mode — check model path")
@@ -139,7 +131,7 @@ def collect(
 
         print(f"[{i}/{total}] running large model...", flush=True)
         large_out = runner.generate(
-            formatted, tier="large", max_tokens=max_tokens, temperature=0.1
+            prompt, tier="large", max_tokens=max_tokens, temperature=0.1
         )
         if large_out.mock:
             raise RuntimeError("Large model fell back to mock mode — check model path")

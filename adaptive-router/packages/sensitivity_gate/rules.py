@@ -1,9 +1,11 @@
-"""Regex/pattern-based PII rules (v1)."""
+"""Regex/pattern-based PII rules (v1), combined with optional NER (v2)."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+from packages.sensitivity_gate.ner_classifier import check_ner_sensitivity
 
 
 @dataclass(frozen=True)
@@ -51,15 +53,26 @@ class SensitivityResult:
 def check_sensitivity(
     text: str,
     rules: tuple[SensitivityRule, ...] = DEFAULT_RULES,
+    *,
+    use_ner: bool = True,
 ) -> SensitivityResult:
-    """Fast regex gate — returns sensitivity flag and which rules fired."""
+    """Regex + optional NER gate — sensitive if either path flags the prompt."""
     matched: list[str] = []
     for rule in rules:
         if rule.pattern.search(text):
             matched.append(rule.name)
 
+    regex_triggers = [r.description for r in rules if r.name in matched]
+
+    ner_matched: list[str] = []
+    ner_triggers: list[str] = []
+    if use_ner:
+        ner_result = check_ner_sensitivity(text)
+        ner_matched = ner_result.matched_rules
+        ner_triggers = ner_result.triggers
+
     return SensitivityResult(
-        is_sensitive=bool(matched),
-        triggers=[r.description for r in rules if r.name in matched],
-        matched_rules=matched,
+        is_sensitive=bool(matched or ner_matched),
+        triggers=regex_triggers + ner_triggers,
+        matched_rules=matched + ner_matched,
     )

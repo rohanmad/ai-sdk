@@ -9,20 +9,157 @@ Last updated: Aug 28, 2026
 | Step | Component | Status | Notes |
 |------|-----------|--------|-------|
 | 1 | Execution layer + dumb routing | **Done** | Qwen 1.5B + 7B GGUF via llama.cpp; mock fallback |
-| 2 | Sensitivity gate (regex v1) | **Done** | Email, phone, SSN, credit-card patterns |
+| 2 | Sensitivity gate | **Done** | Regex PII + spaCy NER (`en_core_web_sm`) |
 | 3 | Routing decision engine | **Done** | 2×2 policy + hard rules |
-| 4 | Collect labeled data | **Done** | 150 rows in `labeled_requests.csv` |
+| 4 | Collect labeled data | **Done** | 300 rows in `labeled_requests.csv` |
 | 5 | Complexity classifier | **Done** | Logistic regression trained; `model.pkl` saved |
-| 6 | Telemetry + dashboard | **Done (v1)** | SQLite + CLI viewer |
-| 7 | v2 upgrades | **Partial** | NER + XGBoost + web UI not built |
+| 6 | Telemetry + dashboard | **Done** | SQLite logger + CLI viewer + web dashboard |
+| 7 | v2 upgrades | **Partial** | XGBoost not built |
 
 ---
 
 ## Classifier metrics (stratified 5-fold CV, `class_weight='balanced'`)
 
-**Primary estimate:** 5-fold stratified cross-validation (n=150). Production `model.pkl` uses **6 hand-crafted features only** (embeddings reverted after relabeling).
+**Primary estimate:** 5-fold stratified cross-validation. Production `model.pkl` uses **6 legacy hand-crafted features** @ threshold **0.50** (12-feature pattern model reverted Aug 28).
 
-### Labeling fix (Aug 28)
+### Dataset (300 rows, Aug 28)
+
+| | Batch 1 | Batch 2 | Total |
+|--|---------|---------|-------|
+| Prompts | 150 | 150 | **300** |
+| `True` | 127 | 129 | **256 (85.3%)** |
+| `False` | 23 | 21 | **44 (14.7%)** |
+
+Batch 2 collected with labeling v2 (`factual_substring_match` + substring fixes). V2 relabel applied to 4 disputed batch-1 factual rows.
+
+### 5-fold CV — hand-crafted only (n=300)
+
+| Metric | n=150 (relabeled) | n=300 | Δ |
+|--------|-------------------|-------|---|
+| **Accuracy** | 0.640 ± 0.118 | **0.673 ± 0.076** | +0.033 |
+| **False precision** | 0.298 ± 0.087 | 0.287 ± 0.064 | −0.011 |
+| **False recall** | 0.680 ± 0.194 | **0.772 ± 0.071** | +0.092 |
+| **False F1** | **0.412 ± 0.118** | **0.416 ± 0.075** | +0.004 |
+| **True precision** | 0.890 ± 0.080 | **0.943 ± 0.019** | +0.053 |
+| **True recall** | 0.633 ± 0.117 | 0.656 ± 0.084 | +0.023 |
+| **True F1** | 0.737 ± 0.107 | **0.771 ± 0.065** | +0.034 |
+
+**Read:** Doubling data improved accuracy and True-class metrics, but **False precision stayed ~0.29** — still the weak point. False F1 barely moved (+0.004). More clean data alone did not get minority precision to a usable level; the model still over-predicts `False` (88 easy prompts misclassified as hard in aggregated CV).
+
+#### Aggregated confusion matrix — n=300, hand-crafted only
+
+```
+                      pred=False  pred=True
+  actual=False (hard):          34          10
+  actual=True  (easy):          88         168
+```
+
+Hand-crafted max separation (char_length): **0.841**
+
+### Threshold sweep + pattern features (Aug 28, n=300)
+
+**12 features** (6 legacy + 6 new): `open_ended_starter`, `imperative_multi_step`, `factual_pattern`, `length_bucket_short/medium/long`.
+
+Run on other machine:
+```bash
+python packages/complexity_classifier/train.py --handcrafted-only --skip-inspection
+```
+
+#### Threshold sweep (6 legacy features, out-of-fold)
+
+| threshold | accuracy | False prec | False rec | False F1 |
+|-----------|----------|------------|-----------|----------|
+| 0.30 | 0.787 | **0.321** | 0.409 | 0.360 |
+| 0.35 | 0.747 | 0.284 | 0.477 | 0.356 |
+| 0.40 | 0.700 | 0.255 | 0.545 | 0.348 |
+| 0.45 | 0.683 | 0.274 | 0.705 | 0.395 |
+| 0.50 | 0.673 | 0.279 | 0.773 | 0.410 |
+| 0.55 | 0.663 | 0.279 | 0.818 | 0.416 |
+| 0.60 | 0.620 | 0.257 | 0.841 | 0.394 |
+| 0.65 | 0.590 | 0.242 | 0.841 | 0.376 |
+| 0.70 | 0.547 | 0.226 | 0.864 | 0.358 |
+
+**Recommended (recall ≥ 0.50, precision nearest 0.45):** threshold **0.50–0.55** — False precision stays **~0.28**, no usable tradeoff vs pre-relabel sweep.
+
+**Best precision in sweep:** **0.355 @ 0.30** (recall 0.41, below 0.50 floor). **No threshold reaches 0.40+ precision with recall ≥ 0.50.**
+
+#### Pattern features @ threshold 0.50 (vs 6 legacy baseline)
+
+| Metric | 6 legacy @ 0.50 | 12 feat @ 0.50 | Δ |
+|--------|-----------------|----------------|---|
+| False precision | 0.287 | 0.259 | −0.028 |
+| False recall | 0.772 | 0.750 | −0.022 |
+| False F1 | 0.416 | 0.383 | −0.033 |
+
+**Verdict: PRECISION PLATEAU.** Threshold tuning and prompt-pattern features did not meaningfully improve False precision above ~0.29. Pattern features slightly **hurt** metrics.
+
+#### Production model revert (Aug 28)
+
+**Reverted `model.pkl` to 6 legacy features @ threshold 0.50** (`git checkout` from commit `9930748`). Pattern-feature code remains in `features.py` / `vectorize.py` but is **not used** in production (`predict.py` slices to `model.coef_.shape[1]` features).
+
+| Model | False prec | False rec | False F1 |
+|-------|------------|-----------|----------|
+| 6 legacy @ 0.50 (production) | **0.287** | 0.772 | **0.416** |
+| 12 pattern @ 0.55 (reverted) | 0.250 | 0.794 | 0.379 |
+
+### Cost & Routing Analysis (Aug 28, n=300 eval set)
+
+Full pipeline on `labeled_requests.csv`: regex sensitivity gate → 6-feature classifier (0.50) → `decide.py` 2×2 policy. Script: `scripts/analyze_routing_cost.py` → `data/routing_cost_analysis.csv`.
+
+#### Routing distribution
+
+| Target | Count | % |
+|--------|------:|--:|
+| `small_local` | 185 | 61.7% |
+| `cloud` | 115 | 38.3% |
+| `large_local` | 0 | 0.0% |
+
+No PII triggers in eval set → `large_local` unused (only reached via high complexity + high sensitivity or hard rule redirect from cloud).
+
+#### Cost assumptions
+
+| Assumption | Value |
+|------------|-------|
+| Cloud model | `gpt-4o-mini` (`config/policy.yaml`) |
+| Input price | **$0.15 / 1M tokens** |
+| Output price | **$0.60 / 1M tokens** |
+| Source | [OpenAI API pricing](https://developers.openai.com/api/docs/pricing), [gpt-4o-mini](https://developers.openai.com/api/docs/models/gpt-4o-mini) |
+| Local inference | **$0 API cost** (hardware/electricity out of scope) |
+| Avg input tokens/prompt | **11.9** (estimated: `len(prompt)/4`) |
+| Avg output tokens/response | **50** (assumed; collection capped at 64) |
+
+**Per cloud request cost:**
+```
+(11.9 / 1e6) × $0.15  +  (50 / 1e6) × $0.60  =  $0.0000318
+```
+
+**300-request totals:**
+```
+Always cloud:  300 × $0.0000318  =  $0.0095
+Router (115 cloud):              $0.0037
+Savings:                         $0.0058  (60.8%)
+```
+
+**Per 1,000 requests (resume-scale):**
+```
+Always cloud:  $0.032
+Router:        $0.012
+Savings:       $0.020  (~61% API cost reduction)
+```
+
+*Note: Dollar amounts are small because eval prompts are short (~12 input tokens). The **61% reduction** is the stable headline — savings scale linearly with output length (output tokens dominate cost at ~94% of per-request cloud spend with these assumptions).*
+
+#### Honest error-cost tradeoff
+
+| Metric | Value |
+|--------|------:|
+| Ground-truth hard prompts | 44 / 300 (14.7%) |
+| Hard prompts routed to `small_local` (false negatives) | **13** (29.5% of hard, **4.3%** of all prompts) |
+| Hard prompts routed to `cloud` | 31 (70.5% of hard) |
+
+**Read:** Router saves ~61% API cost by serving 62% of requests locally, at the cost of ~4% of all prompts being genuinely hard but sent to the small model anyway.
+
+### Labeling fix (Aug 28, batch 1)
 
 **Bug:** Old labels used raw cosine similarity of full model outputs (`≥ 0.85` → `small_sufficient=True`) with no length normalization or answer extraction. Short correct answers (`"12"`) scored poorly against discursive correct answers (`"The answer is 12, since…"`), mislabeling simple factual prompts as hard. 24/34 old `False` rows had cosine in the 0.72–0.85 band (threshold noise).
 
@@ -84,7 +221,7 @@ Embeddings did not improve minority-class F1 on old labels (False F1 0.291 → 0
 Production policy (`config/policy.yaml`): **`dumb_routing.enabled: false`** — classifier drives complexity.
 
 ```
-Prompt → sensitivity gate (regex) + complexity classifier (model.pkl)
+Prompt → sensitivity gate (regex + NER) + complexity classifier (model.pkl)
        → 2×2 policy table → small_local | large_local | cloud
        → telemetry logged with reason
 ```
@@ -105,8 +242,9 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 - **Data collection** — `collect_data.py` with memory-safe unload + `collect_batches.sh`
 - **Training** — `train.py` → `model.pkl`
 - **Classifier routing** — wired in `decide.py` when dumb routing is off
-- **Telemetry** — `python -m telemetry.dashboard.cli --mode summary`
-- **Tests** — **14 passing** (`pytest -q`; original 9 router/routing tests unchanged)
+- **Telemetry** — `python -m telemetry.dashboard.cli --mode summary` (CLI) or web dashboard (below)
+- **Sensitivity gate** — regex PII + spaCy NER (additive; see below)
+- **Tests** — **41 passing** (`pytest -q --ignore=tests/test_local_runner.py`)
 
 ---
 
@@ -117,6 +255,10 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 | `test_router.py` | Sensitivity, dumb routing (via `policy.dumb.yaml`), mock e2e |
 | `test_hard_rules.py` | `never_cloud_for_high_sensitivity` |
 | `test_classifier_routing.py` | Classifier path when dumb routing is off |
+| `test_features.py` | Hand-crafted + pattern feature extraction |
+| `test_ner_sensitivity.py` | spaCy NER entity detection + combined gate |
+| `test_chat_api.py` | `POST /api/chat` response shape + telemetry logging |
+| `test_dashboard_api.py` | Web dashboard `/api/summary` and `/api/decisions` |
 | `test_local_runner.py` | Model unload / memory (skipped if no GGUF) |
 
 ---
@@ -156,7 +298,7 @@ python packages/complexity_classifier/relabel_prompts.py \
 python packages/complexity_classifier/train.py --handcrafted-only
 ```
 
-**Batch-2 prompts:** `data/sample_prompts_batch2.txt` (150 new: 50 factual / 50 explanatory / 50 design-debug).
+**Batch 2 scripts:** `data/sample_prompts_batch2.txt`, `scripts/collect_batch2.sh` — **collected** (300 total rows).
 
 ### Labeling
 - `packages/complexity_classifier/labeling.py` — cosine + substring + factual matchers
@@ -169,9 +311,104 @@ python packages/complexity_classifier/train.py --handcrafted-only
 - Set `OPENAI_API_KEY` to exercise real cloud routing (currently mock without key)
 
 ### v2 (optional)
-- NER sensitivity (`ner_classifier.py`)
-- Web telemetry dashboard
 - Anthropic adapter
+
+---
+
+## Sensitivity gate — NER (Aug 28)
+
+**Status:** Done. `packages/sensitivity_gate/ner_classifier.py` runs **alongside** regex rules in `check_sensitivity()` — sensitive if **either** path flags the prompt. Regex logic unchanged.
+
+**Install:**
+```bash
+pip install -e ".[ner]"
+python -m spacy download en_core_web_sm
+```
+
+**Entity types flagged:** `PERSON`, `GPE` (location), `LOC`, `ORG`, `NORP` (nationality/group).  
+**Not flagged:** `DATE`, `TIME`, `CARDINAL`, `MONEY`, `QUANTITY`, `PERCENT`, etc.
+
+**Telemetry shape:** `matched_rules` includes regex names (`email`, …) and NER entries (`ner:PERSON`, `ner:GPE`, …). `triggers` lists human-readable reasons from both paths.
+
+### Latency (measured, en_core_web_sm, 10 prompts × 200 iterations)
+
+| Path | Mean | p50 | p95 |
+|------|------|-----|-----|
+| Regex only | 0.003 ms | 0.003 ms | 0.004 ms |
+| NER only | 2.7 ms | 2.6 ms | 3.0 ms |
+| Regex + NER | 2.8 ms | 2.8 ms | 3.6 ms |
+
+**NER overhead:** ~**2.8 ms/request** (model loaded once at module init, not per request).
+
+### Before / after (regex-only → regex + NER)
+
+| Prompt | Before | After |
+|--------|--------|-------|
+| Please send the report to **Sarah Johnson** by end of day. | not sensitive | `ner:PERSON` |
+| Ship the package to **Boston, Massachusetts** tomorrow. | not sensitive | `ner:GPE` |
+| I work at **Acme Corporation** on a confidential project. | not sensitive | `ner:ORG` |
+| Meet with **Dr. Emily Carter** at the downtown clinic. | not sensitive | `ner:PERSON` |
+| Our team is relocating to **Austin, Texas** next quarter. | not sensitive | `ner:GPE` |
+| Explain how photosynthesis converts light into chemical energy. | not sensitive | not sensitive |
+
+**Note:** NER can false-positive on ambiguous tokens (e.g. “Will” as a name) — see `test_ner_sensitivity.py`. Junk entities (repeated single-char strings) are filtered out.
+
+---
+
+## Web telemetry dashboard
+
+Observability UI over `telemetry/routing.db` — routing history and aggregate stats (not a chat interface).
+
+**Stack:** FastAPI JSON API + plain HTML/CSS/JS (`telemetry/dashboard/web/`). CLI viewer unchanged (`telemetry/dashboard/cli.py`).
+
+**Install (one-time):**
+```bash
+pip install -e ".[web]"
+```
+
+**Run:**
+```bash
+# Seed data first if DB is empty (router logs every generate_text call):
+python scripts/demo.py "What is the capital of France?"
+
+# Start dashboard (default http://127.0.0.1:8765)
+python -m telemetry.dashboard.web.app
+```
+
+**What it shows:**
+- Summary cards: total requests, % per target (`small_local` / `large_local` / `cloud`), avg latency per target, estimated API cost savings vs always-cloud (gpt-4o-mini pricing from `telemetry/cost.py`)
+- Bar chart of target distribution
+- Paginated, filterable table of recent decisions (timestamp, prompt preview, target, reason, complexity score, sensitivity, latency)
+
+**API (read-only):**
+- `GET /api/summary` — aggregates + cost comparison
+- `GET /api/decisions?limit=50&offset=0&target=cloud` — paginated decision log
+
+---
+
+## Web chat UI (Aug 28)
+
+Interactive demo surface on the **same server** as the telemetry dashboard — type a message, get a real routed response, see target/reason inline.
+
+**URLs:**
+- Telemetry: http://127.0.0.1:8765/
+- Chat: http://127.0.0.1:8765/chat
+
+**Run** (same command as dashboard):
+```bash
+pip install -e ".[web,local,cloud,ner]"
+python -m telemetry.dashboard.web.app
+```
+
+**What it does:**
+- `POST /api/chat` runs the full router pipeline via `Router.generate_text()` (sensitivity gate + classifier + policy + execution)
+- Returns response text, target, reason, complexity score, sensitivity flag/triggers, latency
+- Every chat message is logged to `telemetry/routing.db` (shows up on the telemetry page)
+- UI: chat-style history, loading state, inline errors (e.g. missing `OPENAI_API_KEY`), expandable routing details per reply
+
+**Execution:** Uses the **real execution layer** when configured — local GGUF models from `config/policy.yaml` paths, cloud via `OPENAI_API_KEY`. Falls back to mock responses only when models/API key are unavailable (noted in routing details).
+
+**Nav:** Links between `/` (telemetry) and `/chat` in the header.
 
 ---
 
@@ -179,15 +416,14 @@ python packages/complexity_classifier/train.py --handcrafted-only
 
 ```bash
 cd adaptive-router
-pip install -e ".[dev,local,ml]"
+pip install -e ".[dev,local,ml,ner]"
 
-pytest -q                                          # 21 tests (labeling + routing)
+pytest -q
 
-# When ready — data pipeline (long-running, not started):
-python packages/complexity_classifier/relabel_prompts.py ...  # see Labeling v2 section
-./scripts/collect_batch2.sh 30
-python packages/complexity_classifier/train.py --handcrafted-only
+# Threshold sweep + 12-feature CV (long-running):
+python packages/complexity_classifier/train.py --handcrafted-only --skip-inspection
 python -m telemetry.dashboard.cli --mode summary
+python -m telemetry.dashboard.web.app   # telemetry: /  chat: /chat
 ```
 
 ### Data collection (if re-running)
@@ -226,9 +462,16 @@ adaptive-router/
 │   ├── routing_engine/decide.py  ✅ classifier + dumb paths
 │   └── execution/local_runner.py ✅ unload() for memory
 ├── scripts/
+│   ├── analyze_routing_cost.py  ✅ routing distribution + cost analysis
 │   ├── collect_batches.sh    ✅ batch 1 collection
 │   └── collect_batch2.sh     ✅ batch 2 collection (ready, not run)
-└── tests/                    ✅ 21 tests (incl. 12 labeling)
+├── telemetry/
+│   ├── logger.py             ✅ SQLite routing log
+│   ├── cost.py               ✅ shared cloud cost math
+│   └── dashboard/
+│       ├── cli.py            ✅ CLI summary / recent
+│       └── web/              ✅ FastAPI + static dashboard
+└── tests/                    ✅ 29 tests (incl. dashboard API)
 ```
 
 ---

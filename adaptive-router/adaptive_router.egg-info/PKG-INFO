@@ -14,10 +14,15 @@ Requires-Dist: scikit-learn>=1.3.0; extra == "ml"
 Requires-Dist: pandas>=2.0.0; extra == "ml"
 Requires-Dist: sentence-transformers>=2.0.0; extra == "ml"
 Requires-Dist: joblib>=1.3.0; extra == "ml"
+Provides-Extra: ner
+Requires-Dist: spacy>=3.7.0; extra == "ner"
+Provides-Extra: web
+Requires-Dist: fastapi>=0.100.0; extra == "web"
+Requires-Dist: uvicorn[standard]>=0.23.0; extra == "web"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
 Provides-Extra: all
-Requires-Dist: adaptive-router[cloud,dev,local,ml]; extra == "all"
+Requires-Dist: adaptive-router[cloud,dev,local,ml,ner,web]; extra == "all"
 
 # Adaptive Inference Router SDK
 
@@ -68,9 +73,14 @@ Requires `python3` on PATH (or set `ADAPTIVE_ROUTER_PYTHON`).
 
 ### Data collection (new machine)
 
-Collection scripts need Python 3.10+, local GGUF models, and ML deps. From `adaptive-router/`:
+Collection scripts need Python 3.10+, local GGUF models, and ML deps. **Use a virtual environment** — system Python on many Linux/macOS installs blocks `pip install` with `externally-managed-environment`.
 
 ```bash
+cd adaptive-router
+
+# One-time setup
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[local,ml,dev]"
 
 # Ensure models exist at paths in config/policy.yaml (see models/small/, models/large/)
@@ -84,7 +94,28 @@ If `python` is not on your PATH (common on macOS), the scripts use `python3` aut
 PYTHON=/path/to/python3 ./scripts/collect_batch2.sh 30
 ```
 
-Each prompt runs small + large models sequentially (~1–2 min/prompt). The "close other heavy apps" line is just a RAM tip, not an error.
+Each prompt runs small + large models sequentially (~1–2 min/prompt). The RAM tip at startup is normal, not an error.
+
+### Download local GGUF models (~5.5 GB total)
+
+Models are **not** installed by pip. Download from Hugging Face (requires `huggingface_hub`, included in `[local]`):
+
+```bash
+cd adaptive-router
+mkdir -p models/small models/large
+
+# Small model (~1 GB)
+hf download Qwen/Qwen2.5-1.5B-Instruct-GGUF \
+  qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  --local-dir models/small
+
+# Large model (~4.5 GB, 2 shards — llama.cpp loads both automatically)
+hf download Qwen/Qwen2.5-7B-Instruct-GGUF \
+  --include "qwen2.5-7b-instruct-q4_k_m-*" \
+  --local-dir models/large
+```
+
+Paths must match `config/policy.yaml` (first shard for the 7B model). If `hf` is not found: `pip install huggingface_hub` or use `huggingface-cli download` instead.
 
 ## Architecture
 
@@ -161,6 +192,17 @@ const response = await router.generateText({ prompt: "Hello!" });
 console.log(response.routing.target, response.routing.reason);
 ```
 
+## Sensitivity gate
+
+Regex patterns (email, phone, SSN, credit-card) plus optional spaCy NER for names, locations, and organizations.
+
+```bash
+pip install -e ".[ner]"
+python -m spacy download en_core_web_sm
+```
+
+NER runs additively in `check_sensitivity()` — a prompt is sensitive if regex **or** NER flags it.
+
 ## Telemetry
 
 Every request is logged to `telemetry/routing.db`:
@@ -168,6 +210,7 @@ Every request is logged to `telemetry/routing.db`:
 ```bash
 python -m telemetry.dashboard.cli --mode summary
 python -m telemetry.dashboard.cli --limit 10
+python -m telemetry.dashboard.web.app   # telemetry at /, chat at /chat
 ```
 
 ## Project layout
@@ -176,7 +219,7 @@ python -m telemetry.dashboard.cli --limit 10
 adaptive-router/
 ├── packages/
 │   ├── sdk/                  # Python + TypeScript public API
-│   ├── sensitivity_gate/     # Regex PII rules (v1)
+│   ├── sensitivity_gate/     # Regex PII + spaCy NER
 │   ├── complexity_classifier/# Feature extraction + training (step 5)
 │   ├── routing_engine/       # 2×2 policy logic
 │   └── execution/            # local_runner + cloud_adapter

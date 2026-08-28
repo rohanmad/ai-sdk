@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive Router — Telemetry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand">
+          <span class="brand-prefix">telemetry</span>
+          <h1>Adaptive Router</h1>
+        </div>
+        <p class="header-desc">Routing decision log and aggregate cost metrics</p>
+        <nav class="site-nav" aria-label="Main">
+          <a href="/" class="nav-link is-active">telemetry</a>
+          <a href="/chat" class="nav-link">chat</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section id="hero-section" class="hero-band" aria-live="polite">
+        <p class="loading">Loading metrics…</p>
+      </section>
+
+      <section id="secondary-metrics" class="stat-strip" hidden></section>
+
+      <section class="panel distribution-panel">
+        <div class="panel-head">
+          <h2>Target distribution</h2>
+          <span id="distribution-total" class="panel-meta"></span>
+        </div>
+        <div id="target-chart" class="stacked-bar-wrap" aria-label="Target distribution chart">
+          <p class="loading">Loading chart…</p>
+        </div>
+        <div id="target-legend" class="distribution-table"></div>
+      </section>
+
+      <section class="panel table-panel">
+        <div class="table-head">
+          <h2>Recent decisions</h2>
+          <label class="filter-control">
+            <span class="filter-label">target</span>
+            <select id="target-filter">
+              <option value="">all</option>
+              <option value="small_local">small_local</option>
+              <option value="large_local">large_local</option>
+              <option value="cloud">cloud</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table id="decisions-table">
+            <thead>
+              <tr>
+                <th data-sort="timestamp">time</th>
+                <th data-sort="prompt">prompt</th>
+                <th data-sort="target">target</th>
+                <th data-sort="reason">reason</th>
+                <th class="num" data-sort="complexity_score">complexity</th>
+                <th data-sort="sensitivity_flag">sensitive</th>
+                <th class="num" data-sort="latency_ms">latency_ms</th>
+              </tr>
+            </thead>
+            <tbody id="decisions-body">
+              <tr><td colspan="7" class="loading">Loading decisions…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button id="prev-page" class="btn" disabled>prev</button>
+          <span id="page-info" class="page-info">page 1</span>
+          <button id="next-page" class="btn">next</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      read-only · <code>telemetry/routing.db</code>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

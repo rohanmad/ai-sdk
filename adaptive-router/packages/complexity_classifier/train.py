@@ -20,6 +20,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from packages.complexity_classifier.features import embed_prompts, extract_features
 from packages.complexity_classifier.vectorize import (
     HANDCRAFTED_FEATURE_NAMES,
+    LEGACY_HANDCRAFTED_DIM,
     prompts_to_matrix,
 )
 
@@ -418,6 +419,77 @@ def print_threshold_table(rows: list[dict]) -> dict | None:
     return best_row
 
 
+def recommend_precision_threshold(
+    rows: list[dict],
+    *,
+    min_false_recall: float = 0.5,
+    target_false_precision: float = 0.45,
+) -> tuple[dict | None, dict | None]:
+    """
+    Pick threshold with False recall >= min_false_recall and precision nearest target.
+    Also returns best-precision row (any recall) for reporting when floor is unreachable.
+    """
+    eligible = [r for r in rows if r["false_recall"] >= min_false_recall]
+    recommended = None
+    if eligible:
+        recommended = min(
+            eligible,
+            key=lambda r: (
+                abs(r["false_precision"] - target_false_precision),
+                -r["false_precision"],
+            ),
+        )
+    best_precision = max(rows, key=lambda r: r["false_precision"])
+    return recommended, best_precision
+
+
+def print_precision_recommendation(
+    recommended: dict | None,
+    best_precision: dict | None,
+) -> None:
+    print("\n" + "=" * 60)
+    print("RECOMMENDED THRESHOLD (precision-focused, recall floor 0.50)")
+    print("=" * 60)
+    if recommended is None:
+        print("No threshold met False recall >= 0.50.")
+    else:
+        print(
+            f"threshold={recommended['threshold']:.2f}  "
+            f"False precision={recommended['false_precision']:.3f}  "
+            f"False recall={recommended['false_recall']:.3f}  "
+            f"False F1={recommended['false_f1']:.3f}  "
+            f"accuracy={recommended['accuracy']:.3f}"
+        )
+    if best_precision is not None:
+        print(
+            f"\nBest False precision in sweep: threshold={best_precision['threshold']:.2f}  "
+            f"False precision={best_precision['false_precision']:.3f}  "
+            f"False recall={best_precision['false_recall']:.3f}"
+        )
+    print("(Recommendation only — not locked into policy.yaml or predict.py yet.)")
+
+
+def print_baseline_enhanced_table(baseline: dict, enhanced: dict, *, threshold: float) -> None:
+    print("\n" + "=" * 60)
+    print(f"BEFORE/AFTER CV (5-fold, enhanced @ threshold={threshold:.2f})")
+    print("=" * 60)
+    print(f"{'metric':<22}  {'6 legacy @0.50':>16}  {'12 feat @tuned':>16}  {'delta':>10}")
+    rows = [
+        ("accuracy", "accuracy"),
+        ("False precision", "false_precision"),
+        ("False recall", "false_recall"),
+        ("False F1", "false_f1"),
+        ("True precision", "true_precision"),
+        ("True recall", "true_recall"),
+        ("True F1", "true_f1"),
+    ]
+    for label, key in rows:
+        old = baseline[key]
+        new = enhanced[key]
+        delta = new - old
+        print(f"{label:<22}  {old:16.4f}  {new:16.4f}  {delta:+10.4f}")
+
+
 def train_single_split(
     data_path: Path,
     output_path: Path,
@@ -491,7 +563,12 @@ def main() -> None:
     parser.add_argument(
         "--handcrafted-only",
         action="store_true",
-        help="Train and evaluate with 6 hand-crafted features only (no embeddings)",
+        help="Train and evaluate with hand-crafted features only (no embeddings)",
+    )
+    parser.add_argument(
+        "--skip-inspection",
+        action="store_true",
+        help="Skip verbose per-row feature inspection tables",
     )
     args = parser.parse_args()
 
@@ -508,14 +585,23 @@ def main() -> None:
     print("\n" + "=" * 60)
     print("STEP 2a — HAND-CRAFTED FEATURE INSPECTION")
     print("=" * 60)
-    handcrafted_report = inspect_handcrafted_features(df, random_state=args.random_state)
+    if args.skip_inspection:
+        from packages.complexity_classifier.features import extract_features
+
+        handcrafted_report = {"max_separation": 0.0, "weak_signal": False}
+        print(f"Skipped (--skip-inspection). {len(HANDCRAFTED_FEATURE_NAMES)} features:")
+        for i, name in enumerate(HANDCRAFTED_FEATURE_NAMES, 1):
+            print(f"  {i}. {name}")
+    else:
+        handcrafted_report = inspect_handcrafted_features(df, random_state=args.random_state)
     X_handcrafted = build_feature_matrix(prompts, use_embeddings=False)
+    X_legacy = X_handcrafted[:, :LEGACY_HANDCRAFTED_DIM]
 
     print("\n" + "=" * 60)
-    print("STEP 1 — CV: 6 HAND-CRAFTED FEATURES ONLY")
+    print(f"STEP 1 — CV: {LEGACY_HANDCRAFTED_DIM} LEGACY FEATURES (threshold=0.50)")
     print("=" * 60)
     cv_baseline = cross_validate(
-        X_handcrafted,
+        X_legacy,
         y,
         n_splits=args.folds,
         random_state=args.random_state,
@@ -525,6 +611,57 @@ def main() -> None:
     baseline_summary = cv_metrics_summary(cv_baseline)
 
     if args.handcrafted_only:
+        print("\n" + "=" * 60)
+        print("STEP 1b — THRESHOLD SWEEP (6 legacy features, n=300)")
+        print("=" * 60)
+        threshold_rows = threshold_sweep_cv(
+            X_legacy,
+            y,
+            n_splits=args.folds,
+            random_state=args.random_state,
+            class_weight=class_weight,
+        )
+        print_threshold_table(threshold_rows)
+        recommended, best_precision = recommend_precision_threshold(threshold_rows)
+        print_precision_recommendation(recommended, best_precision)
+        chosen_threshold = recommended["threshold"] if recommended else 0.5
+
+        legacy_at_threshold = cross_validate(
+            X_legacy,
+            y,
+            n_splits=args.folds,
+            random_state=args.random_state,
+            class_weight=class_weight,
+            threshold=chosen_threshold,
+        )
+        legacy_summary = cv_metrics_summary(legacy_at_threshold)
+
+        print("\n" + "=" * 60)
+        print(
+            f"STEP 3 — CV: {len(HANDCRAFTED_FEATURE_NAMES)} FEATURES "
+            f"(6 legacy + 6 pattern), threshold={chosen_threshold:.2f}"
+        )
+        print("=" * 60)
+        cv_enhanced = cross_validate(
+            X_handcrafted,
+            y,
+            n_splits=args.folds,
+            random_state=args.random_state,
+            class_weight=class_weight,
+            threshold=chosen_threshold,
+        )
+        print_cv_metrics(cv_enhanced)
+        enhanced_summary = cv_metrics_summary(cv_enhanced)
+
+        print_baseline_enhanced_table(baseline_summary, enhanced_summary, threshold=chosen_threshold)
+
+        print("\n" + "=" * 60)
+        print("REFERENCE — prior 300-row baseline (6 feat, threshold=0.50)")
+        print("=" * 60)
+        print(
+            "accuracy=0.673  False prec=0.287  False rec=0.772  False F1=0.416"
+        )
+
         single = train_single_split(
             args.data,
             args.output,
@@ -535,15 +672,37 @@ def main() -> None:
         print_single_split(single)
         print(
             f"\nModel saved to: {args.output.resolve()} "
-            f"(hand-crafted features only, 80/20 split)"
+            f"(12 hand-crafted features, 80/20 split)"
         )
+
         print("\n" + "=" * 60)
         print("SUMMARY")
         print("=" * 60)
+        print(f"Hand-crafted max separation: {handcrafted_report['max_separation']:.3f}")
+        print(f"Recommended threshold: {chosen_threshold:.2f}")
         print(
-            f"Hand-crafted max separation: {handcrafted_report['max_separation']:.3f}"
+            f"False precision @ recommended threshold: "
+            f"{legacy_summary['false_precision']:.4f} (legacy 6 feat) → "
+            f"{enhanced_summary['false_precision']:.4f} (12 feat)"
         )
-        print(f"False-class F1 (5-fold CV): {baseline_summary['false_f1']:.4f}")
+        print(
+            f"False F1 @ recommended threshold: "
+            f"{legacy_summary['false_f1']:.4f} → {enhanced_summary['false_f1']:.4f}"
+        )
+        if best_precision and best_precision["false_precision"] >= 0.40:
+            print("Note: best precision in sweep reached >= 0.40 but may be below recall floor.")
+        precision_gain = enhanced_summary["false_precision"] - baseline_summary["false_precision"]
+        if enhanced_summary["false_precision"] >= 0.40:
+            print("Verdict: False precision reached usable range (>= 0.40).")
+        elif precision_gain >= 0.05:
+            print("Verdict: Meaningful precision gain, but still below 0.40 target.")
+        else:
+            print(
+                "Verdict: PRECISION PLATEAU — threshold sweep and pattern features did not "
+                "meaningfully improve False precision above ~0.29 (best sweep: "
+                f"{best_precision['false_precision']:.3f} @ {best_precision['threshold']:.2f}). "
+                "Consider accepting high-recall / lower-precision as the final design."
+            )
         return
 
     embedding_report = inspect_embedding_separation(df)
