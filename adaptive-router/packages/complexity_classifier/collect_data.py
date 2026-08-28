@@ -10,17 +10,21 @@ import sys
 from pathlib import Path
 
 import yaml
-from sklearn.metrics.pairwise import cosine_similarity
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from packages.complexity_classifier.labeling import (
+    DEFAULT_SIMILARITY_THRESHOLD,
+    format_notes,
+    label_outputs,
+)
 from packages.execution.local_runner import LocalRunner, LocalRunnerConfig  # noqa: E402
 
 DEFAULT_PROMPTS = ROOT / "data" / "sample_prompts.txt"
 DEFAULT_OUTPUT = ROOT / "data" / "labeled_requests.csv"
 DEFAULT_POLICY = ROOT / "config" / "policy.yaml"
-SIMILARITY_THRESHOLD = 0.85
+SIMILARITY_THRESHOLD = DEFAULT_SIMILARITY_THRESHOLD
 ENCODER_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 FIELDNAMES = [
@@ -65,11 +69,6 @@ def load_encoder():
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(ENCODER_NAME)
-
-
-def cosine_sim(a: str, b: str, encoder) -> float:
-    embeddings = encoder.encode([a, b])
-    return float(cosine_similarity([embeddings[0]], [embeddings[1]])[0, 0])
 
 
 def append_row(output_path: Path, row: dict) -> None:
@@ -150,21 +149,24 @@ def collect(
             print(f"[{i}/{total}] loading embedding model...", flush=True)
             encoder = load_encoder()
 
-        sim = cosine_sim(small_out.text, large_out.text, encoder)
-        small_sufficient = sim >= similarity_threshold
-        complexity_label = "low" if small_sufficient else "high"
-
+        result = label_outputs(
+            small_out.text,
+            large_out.text,
+            encoder,
+            similarity_threshold=similarity_threshold,
+        )
         row = {
             "prompt": prompt,
-            "complexity_label": complexity_label,
-            "small_sufficient": str(small_sufficient).lower(),
+            "complexity_label": result.complexity_label,
+            "small_sufficient": str(result.small_sufficient).lower(),
             "large_sufficient": "true",
-            "notes": f"cosine_sim={sim:.4f}",
+            "notes": format_notes(result),
         }
         append_row(output_path, row)
         collected += 1
         print(
-            f"  sim={sim:.4f} small_sufficient={small_sufficient} "
+            f"  sim={result.cosine_sim:.4f} small_sufficient={result.small_sufficient} "
+            f"method={result.method} "
             f"({small_out.latency_ms:.0f}ms + {large_out.latency_ms:.0f}ms)",
             flush=True,
         )

@@ -1,0 +1,8 @@
+"prompt","old_small_sufficient","new_small_sufficient","old_notes","new_notes"
+"What year did World War II end?","false","true","cosine_sim=0.8122","cosine_sim=0.8122; method=short_substring_match; short_output=true; substring_match=true"
+"What is the square root of 144?","false","true","cosine_sim=0.7664","cosine_sim=0.7664; method=short_substring_match; short_output=true; substring_match=true"
+"What is H2O commonly known as?","false","true","cosine_sim=0.4083","cosine_sim=0.4083; method=short_substring_match; short_output=true; substring_match=true"
+"How many states are in the United States?","false","true","cosine_sim=0.7161","cosine_sim=0.7161; method=short_substring_match; short_output=true; substring_match=true"
+"What is the smallest prime number?","false","true","cosine_sim=0.8385","cosine_sim=0.8385; method=short_substring_match; short_output=true; substring_match=true"
+"How many weeks are in a year?","false","true","cosine_sim=0.7719","cosine_sim=0.7719; method=short_substring_match; short_output=true; substring_match=true"
+"How many players are on a soccer team?","false","true","cosine_sim=0.7771","cosine_sim=0.7771; method=short_substring_match; short_output=true; substring_match=true"

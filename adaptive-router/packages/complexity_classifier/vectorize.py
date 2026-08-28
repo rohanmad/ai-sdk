@@ -1,12 +1,18 @@
-"""Convert ComplexityFeatures to a numeric vector for sklearn."""
+"""Convert hand-crafted + embedding features to a numeric vector for sklearn."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from packages.complexity_classifier.features import ComplexityFeatures, extract_features
+from packages.complexity_classifier.features import (
+    EMBEDDING_DIM,
+    ComplexityFeatures,
+    embed_prompt,
+    embed_prompts,
+    extract_features,
+)
 
-FEATURE_NAMES = (
+HANDCRAFTED_FEATURE_NAMES = (
     "char_length",
     "word_count",
     "question_marks",
@@ -15,8 +21,11 @@ FEATURE_NAMES = (
     "multi_step_hint",
 )
 
+# Backward-compatible alias
+FEATURE_NAMES = HANDCRAFTED_FEATURE_NAMES
 
-def features_to_array(features: ComplexityFeatures) -> np.ndarray:
+
+def handcrafted_to_array(features: ComplexityFeatures) -> np.ndarray:
     return np.array(
         [
             features.char_length,
@@ -30,5 +39,31 @@ def features_to_array(features: ComplexityFeatures) -> np.ndarray:
     )
 
 
-def prompt_to_array(prompt: str) -> np.ndarray:
-    return features_to_array(extract_features(prompt))
+def features_to_array(features: ComplexityFeatures) -> np.ndarray:
+    return handcrafted_to_array(features)
+
+
+def prompt_to_handcrafted_array(prompt: str) -> np.ndarray:
+    return handcrafted_to_array(extract_features(prompt))
+
+
+def prompt_to_array(prompt: str, *, use_embeddings: bool = True) -> np.ndarray:
+    handcrafted = prompt_to_handcrafted_array(prompt)
+    if not use_embeddings:
+        return handcrafted
+    embedding = embed_prompt(prompt)
+    return np.concatenate([handcrafted, embedding])
+
+
+def prompts_to_matrix(
+    prompts: list[str],
+    *,
+    use_embeddings: bool = True,
+) -> np.ndarray:
+    handcrafted = np.vstack([prompt_to_handcrafted_array(p) for p in prompts])
+    if not use_embeddings:
+        return handcrafted
+    embeddings = embed_prompts(prompts)
+    if embeddings.shape[1] != EMBEDDING_DIM:
+        raise ValueError(f"Expected {EMBEDDING_DIM}-dim embeddings, got {embeddings.shape[1]}")
+    return np.hstack([handcrafted, embeddings])

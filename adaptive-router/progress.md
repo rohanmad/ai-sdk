@@ -1,6 +1,6 @@
 # Adaptive Router — Progress
 
-Last updated: Aug 27, 2026
+Last updated: Aug 28, 2026
 
 ---
 
@@ -18,51 +18,64 @@ Last updated: Aug 27, 2026
 
 ---
 
-## Classifier metrics (held-out 80/20 split, `class_weight='balanced'`)
+## Classifier metrics (stratified 5-fold CV, `class_weight='balanced'`)
 
-**Root cause fixed:** unweighted `LogisticRegression` collapsed to always predicting `small_sufficient=True` (majority class). Added `class_weight='balanced'`.
+**Primary estimate:** 5-fold stratified cross-validation (n=150). Production `model.pkl` uses **6 hand-crafted features only** (embeddings reverted after relabeling).
 
-### Class distribution (stratified split — minority class present in train & test)
+### Labeling fix (Aug 28)
+
+**Bug:** Old labels used raw cosine similarity of full model outputs (`≥ 0.85` → `small_sufficient=True`) with no length normalization or answer extraction. Short correct answers (`"12"`) scored poorly against discursive correct answers (`"The answer is 12, since…"`), mislabeling simple factual prompts as hard. 24/34 old `False` rows had cosine in the 0.72–0.85 band (threshold noise).
+
+**Fix:** `packages/complexity_classifier/labeling.py` — for terse outputs (≤15 words on small or large model), substring/number agreement overrides low cosine; longer open-ended outputs still use cosine ≥ 0.85. Relabeled existing 150 prompts via `relabel.py` (re-ran models only for old `False` rows).
+
+| | Before fix | After fix |
+|--|------------|-----------|
+| `True` (easy) | 116 (77.3%) | **123 (82.0%)** |
+| `False` (hard) | 34 (22.7%) | **27 (18.0%)** |
+| Labels changed | — | **7** (`False` → `True`, all factual short-answer) |
+
+### Class distribution (relabeled)
 
 | Split | `True` (easy) | `False` (hard) |
 |-------|---------------|----------------|
-| Full (150) | 116 (77.3%) | 34 (22.7%) |
-| Train (120) | 93 (77.5%) | 27 (22.5%) |
-| Test (30) | 23 (76.7%) | 7 (23.3%) |
+| Full (150) | 123 (82.0%) | 27 (18.0%) |
 
-### Before (`class_weight=None`) — degenerate
+### 5-fold CV — hand-crafted only (relabeled data)
 
-| Metric | Value |
-|--------|-------|
-| Accuracy | 76.67% |
-| `True` precision / recall / F1 | 0.77 / **1.00** / 0.87 |
-| `False` precision / recall / F1 | **0.00 / 0.00 / 0.00** |
+| Metric | Old labels | Relabeled | Δ |
+|--------|------------|-----------|---|
+| **Accuracy** | 0.520 ± 0.034 | **0.640 ± 0.118** | +0.120 |
+| **False precision** | 0.213 ± 0.077 | 0.298 ± 0.087 | +0.085 |
+| **False recall** | 0.476 ± 0.257 | **0.680 ± 0.194** | +0.204 |
+| **False F1** | **0.291 ± 0.124** | **0.412 ± 0.118** | **+0.121** |
+| **True precision** | 0.789 ± 0.084 | 0.890 ± 0.080 | +0.101 |
+| **True recall** | 0.535 ± 0.061 | 0.633 ± 0.117 | +0.098 |
+| **True F1** | 0.632 ± 0.028 | **0.737 ± 0.107** | +0.105 |
+
+**False-class F1 improved meaningfully** (+0.12) after fixing labels — noisy labels were likely the main bottleneck, not feature engineering.
+
+#### Aggregated confusion matrix — hand-crafted only (relabeled)
 
 ```
-Confusion matrix (rows=actual, cols=predicted):
                       pred=False  pred=True
-  actual=False (hard):           0           7
-  actual=True  (easy):           0          23
-  TN=0  FP=7  FN=0  TP=23
+  actual=False (hard):          18           9
+  actual=True  (easy):          45          78
 ```
 
-### After (`class_weight='balanced'`) — not degenerate
+### Historical: hand-crafted vs embeddings on OLD labels (superseded)
 
-| Metric | Value |
-|--------|-------|
-| Accuracy | **66.67%** |
-| `True` precision / recall / F1 | 0.78 / 0.78 / 0.78 |
-| `False` precision / recall / F1 | 0.29 / 0.29 / 0.29 |
+Embeddings did not improve minority-class F1 on old labels (False F1 0.291 → 0.225). Do not use embedding features until labels are further validated.
 
-```
-Confusion matrix (rows=actual, cols=predicted):
-                      pred=False  pred=True
-  actual=False (hard):           2           5
-  actual=True  (easy):           5          18
-  TN=2  FP=5  FN=5  TP=18
-```
+<details>
+<summary>Old-label CV table (pre-relabel)</summary>
 
-**Note:** Overall accuracy dropped because the model no longer cheats by always predicting the majority class. Per-class metrics are now meaningful. Minority-class performance is still weak (29%) — feature engineering or more hard examples may help next.
+| Metric | 6 hand-crafted | 6 + embedding (384-dim) | Δ |
+|--------|----------------|-------------------------|---|
+| **Accuracy** | 0.520 ± 0.034 | 0.580 ± 0.058 | +0.060 |
+| **False F1** | **0.291 ± 0.124** | 0.225 ± 0.103 | −0.066 |
+| **True F1** | 0.632 ± 0.028 | 0.706 ± 0.058 | +0.074 |
+
+</details>
 
 ---
 
@@ -93,7 +106,7 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 - **Training** — `train.py` → `model.pkl`
 - **Classifier routing** — wired in `decide.py` when dumb routing is off
 - **Telemetry** — `python -m telemetry.dashboard.cli --mode summary`
-- **Tests** — **9 passing** (`pytest -q`)
+- **Tests** — **14 passing** (`pytest -q`; original 9 router/routing tests unchanged)
 
 ---
 
@@ -111,9 +124,14 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 ## Known gaps / next improvements
 
 ### Classifier tuning (next)
-- Improve minority-class recall (currently 29% on held-out `False` examples)
-- Try different `cosine_sim` labeling threshold or more hard negatives in training data
-- Feature engineering if balanced model still underperforms after more data
+- **Labels improved but not perfect** — 7 factual mislabels fixed; remaining 27 `False` rows are mostly open-ended design/debug/analyze prompts (look correct on inspection) plus some factual rows where models genuinely disagree
+- Hand-crafted feature separation jumped to **0.85** (char_length) on relabeled data — features now align better with labels
+- Consider collecting more data once a few more borderline factual labels are manually reviewed
+
+### Labeling
+- `packages/complexity_classifier/labeling.py` — cosine + substring logic
+- `packages/complexity_classifier/relabel.py` — re-apply labels to existing prompts
+- Backup: `data/labeled_requests_v1_backup.csv`, changes: `data/label_changes.csv`
 
 ### Cloud path
 - Set `OPENAI_API_KEY` to exercise real cloud routing (currently mock without key)
@@ -131,10 +149,10 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 cd adaptive-router
 pip install -e ".[dev,local,ml]"
 
-pytest -q                                          # 9 tests
+pytest -q                                          # 14 tests (9 original + 5 labeling)
 
-python scripts/demo.py "What is 2+2?"              # classifier → small_local
-python packages/complexity_classifier/train.py     # retrain + metrics
+python packages/complexity_classifier/relabel.py   # re-apply labels to existing 150 prompts
+python packages/complexity_classifier/train.py --handcrafted-only
 python -m telemetry.dashboard.cli --mode summary
 ```
 
@@ -156,11 +174,15 @@ adaptive-router/
 │   └── policy.dumb.yaml      ✅ test / fallback (dumb routing on)
 ├── data/
 │   ├── sample_prompts.txt    ✅ 150 hand-written prompts
-│   └── labeled_requests.csv  ✅ 150 labeled rows
+│   ├── labeled_requests.csv  ✅ 150 relabeled rows
+│   ├── labeled_requests_v1_backup.csv  ✅ pre-fix backup
+│   └── label_changes.csv       ✅ 7 rows changed
 ├── packages/
 │   ├── complexity_classifier/
 │   │   ├── collect_data.py   ✅ memory-safe collection
-│   │   ├── train.py          ✅ logistic regression
+│   │   ├── labeling.py         ✅ cosine + substring labeling
+│   │   ├── relabel.py          ✅ re-label existing prompts
+│   │   ├── train.py            ✅ logistic regression (--handcrafted-only)
 │   │   ├── predict.py        ✅ inference
 │   │   ├── vectorize.py      ✅ feature → numpy
 │   │   └── model.pkl         ✅ trained artifact

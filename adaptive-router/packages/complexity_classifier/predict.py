@@ -37,7 +37,9 @@ def predict_complexity(
         )
 
     model = _load_model(str(path.resolve()))
-    features = prompt_to_array(prompt).reshape(1, -1)
+    n_features = model.coef_.shape[1]
+    use_embeddings = n_features > 6
+    features = prompt_to_array(prompt, use_embeddings=use_embeddings).reshape(1, -1)
 
     proba = model.predict_proba(features)[0]
     # Class 0 = small_sufficient False (high complexity), class 1 = True (low)

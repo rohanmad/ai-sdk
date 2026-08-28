@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+
+import numpy as np
 
 REASONING_KEYWORDS = frozenset(
     {
@@ -23,6 +26,9 @@ REASONING_KEYWORDS = frozenset(
         "why",
     }
 )
+
+ENCODER_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIM = 384
 
 
 @dataclass
@@ -50,3 +56,26 @@ def extract_features(text: str) -> ComplexityFeatures:
             for marker in ("step 1", "first,", "then ", "finally ", "1.", "2.")
         ),
     )
+
+
+@lru_cache(maxsize=1)
+def _get_encoder():
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(ENCODER_NAME)
+
+
+def embed_prompt(text: str) -> np.ndarray:
+    """Return 384-dim sentence-transformer embedding for prompt text."""
+    encoder = _get_encoder()
+    vector = encoder.encode(text, show_progress_bar=False)
+    return np.asarray(vector, dtype=np.float64)
+
+
+def embed_prompts(texts: list[str]) -> np.ndarray:
+    """Batch-embed prompts; returns shape (n, 384)."""
+    if not texts:
+        return np.empty((0, EMBEDDING_DIM), dtype=np.float64)
+    encoder = _get_encoder()
+    vectors = encoder.encode(texts, show_progress_bar=False)
+    return np.asarray(vectors, dtype=np.float64)
