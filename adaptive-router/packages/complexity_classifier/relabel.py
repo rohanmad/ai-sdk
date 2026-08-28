@@ -118,6 +118,7 @@ def relabel(
             small_out.text,
             large_out.text,
             encoder,
+            prompt=prompt,
             similarity_threshold=similarity_threshold,
         )
         new_rows.append(

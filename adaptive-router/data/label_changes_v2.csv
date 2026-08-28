@@ -1,0 +1,5 @@
+"prompt","old_small_sufficient","new_small_sufficient","old_notes","new_notes"
+"What color do you get by mixing red and blue?","false","true","cosine_sim=0.8284; method=short_cosine; short_output=true; substring_match=false","cosine_sim=0.8284; method=short_substring_match; short_output=true; substring_match=true"
+"How many centimeters are in one meter?","false","true","cosine_sim=0.8491; method=long_cosine; short_output=false; substring_match=false","cosine_sim=0.8491; method=factual_substring_match; short_output=false; substring_match=true"
+"Who wrote the Harry Potter series?","false","true","cosine_sim=0.7401; method=short_cosine; short_output=true; substring_match=false","cosine_sim=0.7401; method=short_substring_match; short_output=true; substring_match=true"
+"What organ pumps blood through the body?","false","true","cosine_sim=0.7601; method=short_cosine; short_output=true; substring_match=false","cosine_sim=0.7601; method=short_substring_match; short_output=true; substring_match=true"

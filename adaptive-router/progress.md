@@ -128,10 +128,42 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 - Hand-crafted feature separation jumped to **0.85** (char_length) on relabeled data — features now align better with labels
 - Consider collecting more data once a few more borderline factual labels are manually reviewed
 
+### Labeling v2 (Aug 28 — framework ready, data runs pending)
+
+**Inspection (Step 1):** 10 disputed factual `False` rows surfaced via `inspect_false_labels.py`; 17 open-ended rows look correct. Of the 10: ~4 are substring-matching gaps (#1 purple, #3 100cm, #4 Rowling, #5 heart), ~2 are genuine small-model failures (#2 incomplete hours, #9 wrong eclipse duration), ~4 are medium explanatory (#6–#8, #10) — left as `False` by design.
+
+**Approved fix (items 1–3, implemented in `labeling.py`):**
+1. Safer key-phrase splitting (`you get X`, `written by X`; abbrev-aware period handling)
+2. `answer_number_match` on short factual prompts (largest large-model number must appear in small output)
+3. `answer_token_overlap` for distinctive answer tokens (skipped for `how many` prompts to avoid #2 false positives)
+
+**Not implemented:** number-word normalization (item 4) — deferred.
+
+**Scripts ready (not run yet):**
+```bash
+# Step 3: relabel only the 4 approved rows (~5 min)
+python packages/complexity_classifier/relabel_prompts.py \
+  "What color do you get by mixing red and blue?" \
+  "How many centimeters are in one meter?" \
+  "Who wrote the Harry Potter series?" \
+  "What organ pumps blood through the body?"
+# → backs up to data/labeled_requests_v2_backup.csv
+
+# Step 4: collect 150 new prompts, append to CSV (~2-3 hrs)
+./scripts/collect_batch2.sh 30
+
+# Step 5: retrain + CV
+python packages/complexity_classifier/train.py --handcrafted-only
+```
+
+**Batch-2 prompts:** `data/sample_prompts_batch2.txt` (150 new: 50 factual / 50 explanatory / 50 design-debug).
+
 ### Labeling
-- `packages/complexity_classifier/labeling.py` — cosine + substring logic
-- `packages/complexity_classifier/relabel.py` — re-apply labels to existing prompts
-- Backup: `data/labeled_requests_v1_backup.csv`, changes: `data/label_changes.csv`
+- `packages/complexity_classifier/labeling.py` — cosine + substring + factual matchers
+- `packages/complexity_classifier/relabel.py` — bulk re-label
+- `packages/complexity_classifier/relabel_prompts.py` — targeted row relabel
+- `packages/complexity_classifier/inspect_false_labels.py` — manual review helper
+- Backups: `labeled_requests_v1_backup.csv` (pre-v1 fix), `labeled_requests_v2_backup.csv` (pre-v2 fix, created but v2 relabel not applied)
 
 ### Cloud path
 - Set `OPENAI_API_KEY` to exercise real cloud routing (currently mock without key)
@@ -149,9 +181,11 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 cd adaptive-router
 pip install -e ".[dev,local,ml]"
 
-pytest -q                                          # 14 tests (9 original + 5 labeling)
+pytest -q                                          # 21 tests (labeling + routing)
 
-python packages/complexity_classifier/relabel.py   # re-apply labels to existing 150 prompts
+# When ready — data pipeline (long-running, not started):
+python packages/complexity_classifier/relabel_prompts.py ...  # see Labeling v2 section
+./scripts/collect_batch2.sh 30
 python packages/complexity_classifier/train.py --handcrafted-only
 python -m telemetry.dashboard.cli --mode summary
 ```
@@ -173,23 +207,28 @@ adaptive-router/
 │   ├── policy.yaml           ✅ production (classifier on, dumb off)
 │   └── policy.dumb.yaml      ✅ test / fallback (dumb routing on)
 ├── data/
-│   ├── sample_prompts.txt    ✅ 150 hand-written prompts
-│   ├── labeled_requests.csv  ✅ 150 relabeled rows
-│   ├── labeled_requests_v1_backup.csv  ✅ pre-fix backup
-│   └── label_changes.csv       ✅ 7 rows changed
+│   ├── sample_prompts.txt         ✅ 150 prompts (batch 1)
+│   ├── sample_prompts_batch2.txt  ✅ 150 prompts (batch 2, not collected yet)
+│   ├── labeled_requests.csv       ✅ 150 labeled rows (v1 relabel applied)
+│   ├── labeled_requests_v1_backup.csv
+│   └── labeled_requests_v2_backup.csv  (snapshot before v2 relabel — not applied)
 ├── packages/
 │   ├── complexity_classifier/
-│   │   ├── collect_data.py   ✅ memory-safe collection
-│   │   ├── labeling.py         ✅ cosine + substring labeling
-│   │   ├── relabel.py          ✅ re-label existing prompts
-│   │   ├── train.py            ✅ logistic regression (--handcrafted-only)
+│   │   ├── labeling.py            ✅ v2 matchers (items 1-3)
+│   │   ├── relabel_prompts.py     ✅ targeted relabel
+│   │   ├── inspect_false_labels.py ✅ disputed-row inspection
+│   │   ├── relabel.py
+│   │   ├── collect_data.py
+│   │   ├── train.py               ✅ --handcrafted-only
 │   │   ├── predict.py        ✅ inference
 │   │   ├── vectorize.py      ✅ feature → numpy
 │   │   └── model.pkl         ✅ trained artifact
 │   ├── routing_engine/decide.py  ✅ classifier + dumb paths
 │   └── execution/local_runner.py ✅ unload() for memory
-├── scripts/collect_batches.sh    ✅ batch collection wrapper
-└── tests/                        ✅ 9 tests passing
+├── scripts/
+│   ├── collect_batches.sh    ✅ batch 1 collection
+│   └── collect_batch2.sh     ✅ batch 2 collection (ready, not run)
+└── tests/                    ✅ 21 tests (incl. 12 labeling)
 ```
 
 ---

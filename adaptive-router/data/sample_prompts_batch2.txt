@@ -1,0 +1,155 @@
+# short factual (50)
+What is the capital of Germany?
+How many seconds are in a minute?
+What is the chemical symbol for iron?
+Who painted The Starry Night?
+What is 25 multiplied by 4?
+How many bones are in the adult human body?
+What planet is known as the Red Planet?
+What is the largest desert in the world?
+Who discovered gravity?
+What is the melting point of ice in Celsius?
+How many sides does a pentagon have?
+What year did the Titanic sink?
+What is the speed of sound in air at sea level?
+What is the deepest ocean trench called?
+How many bits are in a byte?
+What language is spoken in Mexico?
+What is the cube root of 27?
+Who invented the light bulb?
+What is CO2 commonly known as?
+How many moons does Earth have?
+What is the currency of Japan?
+What color do you get by mixing yellow and blue?
+How many ounces are in a pound?
+What is the capital of India?
+Who was the first woman to win a Nobel Prize?
+What is the boiling point of water in Fahrenheit?
+How many teeth does an adult human typically have?
+What is the fastest land animal?
+What gas do humans exhale?
+How many time zones does Russia span?
+What is the largest internal organ in the human body?
+Who developed the polio vaccine?
+What is the main ingredient in guacamole?
+How many months have 31 days?
+What is the capital of Brazil?
+What instrument is known as the king of instruments?
+How many millimeters are in a centimeter?
+What is the chemical formula for methane?
+Who wrote Pride and Prejudice?
+What is the smallest country by area?
+How many days are in a non-leap year February?
+What is the primary language of South Korea?
+What is 81 divided by 9?
+What organ filters blood in the human body?
+How many degrees are in a straight angle?
+What is the capital of Egypt?
+Who discovered radium?
+What is the softest mineral on the Mohs scale?
+How many players are on a basketball team?
+What is the atomic number of oxygen?
+
+# medium explanatory (50)
+Explain how vaccines create immunity in simple terms.
+What is the difference between evaporation and condensation?
+Describe what a load balancer does to a non-technical person.
+How does a microwave oven heat food?
+Explain the concept of opportunity cost.
+What is deep learning in plain English?
+Describe how antibiotics fight bacterial infections.
+What is the difference between CPU and GPU?
+Explain how tides are caused.
+What does compound interest mean for savers?
+Describe the carbon cycle briefly.
+How does Wi-Fi transmit data wirelessly?
+Explain what database normalization achieves.
+What is the difference between GET and POST in HTTP?
+Describe how hybrid cars combine power sources.
+Explain what a decision tree is at a high level.
+How do operating systems manage memory?
+What is the purpose of a digital signature?
+Explain how tariffs affect international trade.
+Describe what refactoring means in software.
+How does RSA encryption work conceptually?
+Explain the difference between sensitivity and specificity.
+What happens during a lunar eclipse?
+Describe how autoscaling helps cloud applications.
+Explain what a bond yield represents in finance.
+How does a B-tree index speed up queries?
+What is the difference between IPv4 and IPv6?
+Explain how a heat pump transfers warmth.
+Describe what user stories aim to capture.
+How does memoization reduce computation time?
+Explain the role of ribosomes in protein synthesis.
+What is the difference between mean and median?
+Describe how anycast routing reduces latency.
+Explain what system design interviews typically assess.
+How does active noise control work in earbuds?
+What is the difference between a heap and a stack?
+Explain how wind turbines generate electricity.
+Describe what vendor due diligence involves.
+How does a skip list provide ordered lookups?
+Explain the basics of functional programming.
+What is the difference between bandwidth and throughput?
+Describe how intrusion detection systems work.
+Explain what acceptance criteria document.
+How does a publish-subscribe pattern decouple components?
+What is the difference between OLTP and OLAP?
+Describe how semantic versioning helps API consumers.
+Explain what operational risk means in production systems.
+How does a circuit breaker prevent cascading failures?
+What is the difference between supervised and unsupervised learning?
+Describe how accessibility standards improve web products.
+
+# multi-step reasoning (50)
+Compare serverless and container-based deployment for a seed-stage startup.
+A payment webhook fails intermittently. Outline a debugging plan.
+Design a token bucket rate limiter for a public API gateway.
+Given strict latency SLOs, propose three ways to speed up routing decisions.
+Analyze tradeoffs between columnar and row storage for event analytics.
+Debug why unit tests pass in CI but integration tests fail on staging.
+Compare federated learning vs centralized training for a hospital consortium.
+Plan a blue-green deployment for a stateful chat service.
+Evaluate whether to use Redis or Memcached for session caching.
+Trace through why a merge sort might degrade on nearly sorted input.
+Design a cache invalidation strategy for a news aggregation feed.
+Compare push vs pull notification architectures for mobile clients.
+Analyze security risks of logging raw request payloads in production.
+Propose an architecture for multi-region active-active failover.
+Debug a deadlock that appears only under concurrent checkout load.
+Compare saga vs two-phase commit for distributed order fulfillment.
+Design a rollout plan for enabling classifier-based routing in production.
+Analyze why random forests might outperform logistic regression on tabular data.
+Plan how to evaluate labeling quality before scaling data collection.
+Compare webhook retries vs message queues for third-party integrations.
+Design a fallback chain when local large models exceed memory limits.
+Debug inconsistent latency spikes on only one Kubernetes node pool.
+Analyze tradeoffs of encrypting telemetry payloads end to end.
+Propose monitoring dashboards for routing accuracy and cost per request.
+Compare online vs batch feature computation for a routing classifier.
+Design a policy DSL that expresses hard privacy rules declaratively.
+Debug why embedding features hurt minority-class F1 on noisy labels.
+Analyze cost-latency tradeoffs for quantizing a 7B model to Q3_K_M.
+Plan a pipeline to audit routing decisions for compliance review.
+Compare rules-based vs ML-based sensitivity detection for PII.
+Design integration tests for a router that switches between three targets.
+Debug why a classifier over-routes easy prompts to cloud endpoints.
+Analyze when to prefer a large local model over a small cloud model.
+Propose thresholds for escalating from small to large local inference.
+Compare linear models vs gradient boosting for interpretable routing.
+Design structured telemetry to explain every routing decision to SREs.
+Debug feature drift between training prompts and production traffic.
+Analyze failure modes when routers ignore sensitivity hard rules.
+Plan how to validate privacy guarantees before enabling cloud routing.
+Compare OpenTelemetry vs custom SQLite telemetry for this SDK.
+Design a 3-tier routing policy for complexity, sensitivity, and cost caps.
+Debug why multi-part GGUF shards fail to load on certain machines.
+Analyze latency budget for regex gate plus classifier plus local inference.
+Propose a human review workflow for disputed labeling edge cases.
+Compare INT8 vs FP16 quantization for on-device inference quality.
+Design an SDK surface that exposes routing reasons without leaking PII.
+Debug tokenizer mismatches between training data and production prompts.
+Analyze how to preserve test coverage while refactoring the routing engine.
+Plan documentation for operators tuning complexity thresholds in production.
+Compare shadow routing vs live routing for safe classifier rollouts.
