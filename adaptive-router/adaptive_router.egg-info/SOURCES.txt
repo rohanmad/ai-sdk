@@ -8,8 +8,15 @@ adaptive_router.egg-info/requires.txt
 adaptive_router.egg-info/top_level.txt
 packages/__init__.py
 packages/complexity_classifier/__init__.py
+packages/complexity_classifier/collect_data.py
 packages/complexity_classifier/features.py
+packages/complexity_classifier/inspect_false_labels.py
+packages/complexity_classifier/labeling.py
+packages/complexity_classifier/predict.py
+packages/complexity_classifier/relabel.py
+packages/complexity_classifier/relabel_prompts.py
 packages/complexity_classifier/train.py
+packages/complexity_classifier/vectorize.py
 packages/execution/__init__.py
 packages/execution/cloud_adapter.py
 packages/execution/local_runner.py
@@ -24,5 +31,8 @@ packages/sensitivity_gate/rules.py
 telemetry/__init__.py
 telemetry/logger.py
 telemetry/dashboard/cli.py
+tests/test_classifier_routing.py
 tests/test_hard_rules.py
+tests/test_labeling.py
+tests/test_local_runner.py
 tests/test_router.py

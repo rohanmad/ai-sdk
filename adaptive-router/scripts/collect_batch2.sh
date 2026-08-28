@@ -3,6 +3,9 @@
 # Run only when ready — each prompt needs small + large model inference (~1-2 min each).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck source=common.sh
+source "$(dirname "$0")/common.sh"
+PYTHON="$(resolve_python)"
 
 BATCH="${1:-30}"
 MAX_TOKENS="${MAX_TOKENS:-64}"
@@ -11,17 +14,18 @@ OUTPUT="${OUTPUT:-data/labeled_requests.csv}"
 TARGET="${TARGET:-300}"
 
 echo "=== Batch-2 collection: ${BATCH} new prompts per batch ==="
+echo "Python:       $PYTHON"
 echo "Prompts file: ${PROMPTS}"
 echo "Output:       ${OUTPUT}"
 echo "Target total: ${TARGET} labeled rows"
-echo "Close other heavy apps. Do not run demo.py in parallel."
+echo "Tip: collection loads large GGUF models — close other heavy apps if RAM is tight."
 echo ""
 
 while true; do
   BEFORE=$(($(wc -l < "$OUTPUT") - 1))
   [ "$BEFORE" -lt 0 ] && BEFORE=0
 
-  python packages/complexity_classifier/collect_data.py \
+  "$PYTHON" packages/complexity_classifier/collect_data.py \
     --prompts "$PROMPTS" \
     --output "$OUTPUT" \
     --max-new "$BATCH" \

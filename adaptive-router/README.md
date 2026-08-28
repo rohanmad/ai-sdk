@@ -45,6 +45,26 @@ npm run demo
 
 Requires `python3` on PATH (or set `ADAPTIVE_ROUTER_PYTHON`).
 
+### Data collection (new machine)
+
+Collection scripts need Python 3.10+, local GGUF models, and ML deps. From `adaptive-router/`:
+
+```bash
+pip install -e ".[local,ml,dev]"
+
+# Ensure models exist at paths in config/policy.yaml (see models/small/, models/large/)
+# Then run batch 2 collection (resumes automatically):
+./scripts/collect_batch2.sh 30
+```
+
+If `python` is not on your PATH (common on macOS), the scripts use `python3` automatically. To pin a specific interpreter:
+
+```bash
+PYTHON=/path/to/python3 ./scripts/collect_batch2.sh 30
+```
+
+Each prompt runs small + large models sequentially (~1–2 min/prompt). The "close other heavy apps" line is just a RAM tip, not an error.
+
 ## Architecture
 
 ```
