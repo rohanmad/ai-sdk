@@ -47,9 +47,14 @@ Requires `python3` on PATH (or set `ADAPTIVE_ROUTER_PYTHON`).
 
 ### Data collection (new machine)
 
-Collection scripts need Python 3.10+, local GGUF models, and ML deps. From `adaptive-router/`:
+Collection scripts need Python 3.10+, local GGUF models, and ML deps. **Use a virtual environment** — system Python on many Linux/macOS installs blocks `pip install` with `externally-managed-environment`.
 
 ```bash
+cd adaptive-router
+
+# One-time setup
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[local,ml,dev]"
 
 # Ensure models exist at paths in config/policy.yaml (see models/small/, models/large/)
@@ -63,7 +68,28 @@ If `python` is not on your PATH (common on macOS), the scripts use `python3` aut
 PYTHON=/path/to/python3 ./scripts/collect_batch2.sh 30
 ```
 
-Each prompt runs small + large models sequentially (~1–2 min/prompt). The "close other heavy apps" line is just a RAM tip, not an error.
+Each prompt runs small + large models sequentially (~1–2 min/prompt). The RAM tip at startup is normal, not an error.
+
+### Download local GGUF models (~5.5 GB total)
+
+Models are **not** installed by pip. Download from Hugging Face (requires `huggingface_hub`, included in `[local]`):
+
+```bash
+cd adaptive-router
+mkdir -p models/small models/large
+
+# Small model (~1 GB)
+hf download Qwen/Qwen2.5-1.5B-Instruct-GGUF \
+  qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  --local-dir models/small
+
+# Large model (~4.5 GB, 2 shards — llama.cpp loads both automatically)
+hf download Qwen/Qwen2.5-7B-Instruct-GGUF \
+  --include "qwen2.5-7b-instruct-q4_k_m-*" \
+  --local-dir models/large
+```
+
+Paths must match `config/policy.yaml` (first shard for the 7B model). If `hf` is not found: `pip install huggingface_hub` or use `huggingface-cli download` instead.
 
 ## Architecture
 
