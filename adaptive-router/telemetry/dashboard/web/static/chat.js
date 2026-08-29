@@ -1,4 +1,5 @@
 const messagesEl = document.getElementById("messages");
+const messagesScrollEl = document.querySelector(".messages-scroll");
 const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt-input");
 const sendBtn = document.getElementById("send-btn");
@@ -10,7 +11,9 @@ function escapeHtml(text) {
 }
 
 function scrollToBottom() {
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  if (messagesScrollEl) {
+    messagesScrollEl.scrollTop = messagesScrollEl.scrollHeight;
+  }
 }
 
 function appendMessage(className, html) {
@@ -43,11 +46,13 @@ function formatDetails(data) {
 function renderAssistantMessage(data) {
   const sensClass = data.sensitivity_flag ? "on" : "";
   const sensLabel = data.sensitivity_flag ? "sensitive" : "not sensitive";
+  const truncated = data.finish_reason === "length";
   return `
     <p class="msg-body">${escapeHtml(data.text)}</p>
     <div class="msg-meta">
       <span class="target-badge ${escapeHtml(data.target)}">${escapeHtml(data.target)}</span>
       <span class="sens-badge ${sensClass}">${sensLabel}</span>
+      ${truncated ? '<span class="sens-badge on">truncated at token limit</span>' : ""}
       <span class="sens-badge">${data.latency_ms} ms</span>
     </div>
     <details class="route-details">
@@ -60,18 +65,72 @@ function renderAssistantMessage(data) {
 function setLoading(loading) {
   input.disabled = loading;
   sendBtn.disabled = loading;
+  sendBtn.textContent = loading ? "working…" : "send";
+  sendBtn.classList.toggle("is-busy", loading);
+}
+
+function formatElapsed(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
+}
+
+function thinkingMessage(elapsedSec) {
+  if (elapsedSec < 3) {
+    return "Checking sensitivity and routing…";
+  }
+  if (elapsedSec < 10) {
+    return "Running inference — local models can take a while…";
+  }
+  return `Still working — large_local / 7B prompts often take 15–30s (${formatElapsed(elapsedSec)})`;
+}
+
+function showThinkingIndicator() {
+  const el = appendMessage(
+    "thinking",
+    `
+    <div class="thinking-row">
+      <span class="thinking-pulse" aria-hidden="true"></span>
+      <div class="thinking-copy">
+        <p class="thinking-title">Thinking</p>
+        <p class="thinking-status" data-thinking-status>Checking sensitivity and routing…</p>
+        <p class="thinking-elapsed" data-thinking-elapsed>0s</p>
+      </div>
+    </div>
+    `
+  );
+  el.setAttribute("aria-busy", "true");
+  el.setAttribute("aria-label", "Assistant is thinking");
+
+  const statusEl = el.querySelector("[data-thinking-status]");
+  const elapsedEl = el.querySelector("[data-thinking-elapsed]");
+  const started = Date.now();
+
+  const timer = window.setInterval(() => {
+    const elapsedSec = Math.floor((Date.now() - started) / 1000);
+    if (statusEl) statusEl.textContent = thinkingMessage(elapsedSec);
+    if (elapsedEl) elapsedEl.textContent = formatElapsed(elapsedSec);
+  }, 1000);
+
+  return {
+    remove() {
+      window.clearInterval(timer);
+      el.remove();
+    },
+  };
 }
 
 async function sendMessage(prompt) {
   appendMessage("user", `<p class="msg-body">${escapeHtml(prompt)}</p>`);
-  const thinking = appendMessage("thinking", `<p class="msg-body">routing…</p>`);
+  const thinking = showThinkingIndicator();
   setLoading(true);
 
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, max_tokens: 256 }),
+      body: JSON.stringify({ prompt }),
     });
     const data = await res.json();
     thinking.remove();

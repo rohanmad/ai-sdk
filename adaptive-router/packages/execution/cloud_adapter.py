@@ -22,6 +22,7 @@ class CloudGenerateResult:
     model_id: str
     latency_ms: float
     mock: bool
+    finish_reason: str = "stop"
 
 
 class CloudAdapter:
@@ -97,7 +98,9 @@ class CloudAdapter:
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        text = response.choices[0].message.content or ""
+        choice = response.choices[0]
+        text = choice.message.content or ""
+        finish_reason = choice.finish_reason or "stop"
         usage = response.usage
         prompt_tokens = usage.prompt_tokens if usage else self._estimate_tokens(prompt)
         completion_tokens = (
@@ -112,4 +115,5 @@ class CloudAdapter:
             model_id=model_id,
             latency_ms=latency_ms,
             mock=False,
+            finish_reason=finish_reason,
         )

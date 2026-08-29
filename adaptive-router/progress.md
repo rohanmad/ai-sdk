@@ -104,17 +104,31 @@ python packages/complexity_classifier/train.py --handcrafted-only --skip-inspect
 
 ### Cost & Routing Analysis (Aug 28, n=300 eval set)
 
-Full pipeline on `labeled_requests.csv`: regex sensitivity gate → 6-feature classifier (0.50) → `decide.py` 2×2 policy. Script: `scripts/analyze_routing_cost.py` → `data/routing_cost_analysis.csv`.
+Full pipeline on `labeled_requests.csv`: sensitivity gate → 6-feature classifier (0.50) → `decide.py` 2×2 policy. Script: `scripts/analyze_routing_cost.py` → `data/routing_cost_analysis.csv`. Run `python scripts/analyze_routing_cost.py --compare-ner` for regex-only vs regex+NER table.
 
-#### Routing distribution
+#### Routing distribution — regex+NER (current production gate)
 
 | Target | Count | % |
 |--------|------:|--:|
 | `small_local` | 185 | 61.7% |
-| `cloud` | 115 | 38.3% |
-| `large_local` | 0 | 0.0% |
+| `cloud` | 88 | 29.3% |
+| `large_local` | 27 | 9.0% |
 
-No PII triggers in eval set → `large_local` unused (only reached via high complexity + high sensitivity or hard rule redirect from cloud).
+**66 / 300** prompts flagged sensitive (NER; regex alone flagged **0** on this eval set). NER shifts **27** previously-cloud hard prompts → `large_local` (e.g. `ner:ORG` on “GitHub”, “SQL”, “NoSQL”; `ner:GPE` on “Fahrenheit”).
+
+#### Before / after NER on same 300-prompt eval
+
+| Metric | Regex only (pre-NER baseline) | Regex + NER (current) |
+|--------|------------------------------:|----------------------:|
+| `small_local` | 61.7% | 61.7% |
+| `cloud` | 38.3% | **29.3%** |
+| `large_local` | 0.0% | **9.0%** |
+| **Cost savings** | 60.8% | **70.0%** |
+| **Misroute rate** (hard → `small_local`) | 4.3% | 4.3% |
+| Sensitive flagged | 0 | 66 |
+| Savings per 1k req | $0.019 | $0.022 |
+
+Misroute rate unchanged because NER moves hard prompts from `cloud` → `large_local`, not to `small_local`. Cost savings **increase** because fewer requests hit cloud API.
 
 #### Cost assumptions
 
@@ -133,23 +147,23 @@ No PII triggers in eval set → `large_local` unused (only reached via high comp
 (11.9 / 1e6) × $0.15  +  (50 / 1e6) × $0.60  =  $0.0000318
 ```
 
-**300-request totals:**
+**300-request totals (regex+NER):**
 ```
 Always cloud:  300 × $0.0000318  =  $0.0095
-Router (115 cloud):              $0.0037
-Savings:                         $0.0058  (60.8%)
+Router (88 cloud):               $0.0029
+Savings:                         $0.0066  (70.0%)
 ```
 
-**Per 1,000 requests (resume-scale):**
+**Per 1,000 requests (resume-scale, regex+NER):**
 ```
 Always cloud:  $0.032
-Router:        $0.012
-Savings:       $0.020  (~61% API cost reduction)
+Router:        $0.010
+Savings:       $0.022  (~70% API cost reduction)
 ```
 
-*Note: Dollar amounts are small because eval prompts are short (~12 input tokens). The **61% reduction** is the stable headline — savings scale linearly with output length (output tokens dominate cost at ~94% of per-request cloud spend with these assumptions).*
+*Note: Dollar amounts are small because eval prompts are short (~12 input tokens). The **70% reduction** (with NER) is the current headline — was **61%** under regex-only on this same eval set.*
 
-#### Honest error-cost tradeoff
+#### Honest error-cost tradeoff (regex+NER)
 
 | Metric | Value |
 |--------|------:|
@@ -244,7 +258,7 @@ Fallback / test policy (`config/policy.dumb.yaml`): character-count routing for 
 - **Classifier routing** — wired in `decide.py` when dumb routing is off
 - **Telemetry** — `python -m telemetry.dashboard.cli --mode summary` (CLI) or web dashboard (below)
 - **Sensitivity gate** — regex PII + spaCy NER (additive; see below)
-- **Tests** — **41 passing** (`pytest -q --ignore=tests/test_local_runner.py`)
+- **Tests** — **43 passing** (`pytest -q --ignore=tests/test_local_runner.py`)
 
 ---
 
@@ -352,6 +366,34 @@ python -m spacy download en_core_web_sm
 | Explain how photosynthesis converts light into chemical energy. | not sensitive | not sensitive |
 
 **Note:** NER can false-positive on ambiguous tokens (e.g. “Will” as a name) — see `test_ner_sensitivity.py`. Junk entities (repeated single-char strings) are filtered out.
+
+### NER false-positive probe (Aug 28, informal)
+
+**28 ordinary prompts** with capitalized words / tech terms (not intended as PII): **8 flagged (28.6%)** by NER.
+
+| Prompt | NER trigger |
+|--------|-------------|
+| "The Chase account was updated." | `ner:ORG` → Chase |
+| "Jordan scored 30 points last night." | `ner:GPE` → Jordan |
+| "Victor won the chess tournament." | `ner:PERSON` → Victor |
+| "Write a function to sort a list in Python." | `ner:GPE` → Python |
+| "Compare SQL and NoSQL for analytics workloads." | `ner:ORG`/`ner:GPE` |
+
+**Did not flag:** "Will this work?", "May I ask a question?", "Grant me access to the file.", "Mark the checkbox…", "Hope you are doing well."
+
+**Read:** High false-positive rate on tech/product names and ambiguous capitalized words; acceptable for privacy-biased routing but inflates `large_local` share on technical eval prompts (see cost table above). Not fixed — documented limitation.
+
+### `large_local` path verification (Aug 28)
+
+Exercised **high complexity + high sensitivity** (classifier + NER/regex) on production `policy.yaml`:
+
+| Prompt (abbrev.) | Sensitive rules | Target | Complexity |
+|------------------|-----------------|--------|------------|
+| Design pipeline for SSN 123-45-6789… | `ssn`, `ner:ORG` | **large_local** | 0.97 (HIGH) |
+| Analyze Memorial Hospital security; email alice@… | `email`, `ner:ORG` | **large_local** | 0.99 (HIGH) |
+| Build GDPR system for Sarah Johnson's team… | `ner:PERSON`, `ner:ORG` | **large_local** | 0.99 (HIGH) |
+
+Reason pattern: `classifier:… complexity=HIGH; sensitivity=HIGH -> large_local`. Test: `test_high_complexity_and_sensitive_routes_to_large_local` in `test_classifier_routing.py`.
 
 ---
 

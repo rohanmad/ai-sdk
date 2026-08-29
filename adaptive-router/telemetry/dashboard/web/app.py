@@ -74,6 +74,8 @@ def create_app(
         text = result.choices[0].text if result.choices else ""
         mock = "[mock-" in text or "[mock-cloud:" in text
 
+        finish_reason = result.choices[0].finish_reason if result.choices else "stop"
+
         return ChatResponse(
             request_id=result.id,
             text=text,
@@ -85,6 +87,7 @@ def create_app(
             latency_ms=round(result.latency_ms, 2),
             model=result.model,
             mock_execution=mock,
+            finish_reason=finish_reason,
         )
 
     @app.get("/")

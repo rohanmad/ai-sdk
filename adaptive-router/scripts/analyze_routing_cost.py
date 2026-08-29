@@ -47,6 +47,7 @@ def analyze(
     policy_path: Path,
     *,
     avg_output_tokens: int = DEFAULT_AVG_OUTPUT_TOKENS,
+    use_ner: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     _load_model.cache_clear()
     model = _load_model(str((ROOT / "packages/complexity_classifier/model.pkl").resolve()))
@@ -65,7 +66,7 @@ def analyze(
         prompt = str(record["prompt"])
         gt_hard = not parse_bool(record["small_sufficient"])
 
-        sens = check_sensitivity(prompt)
+        sens = check_sensitivity(prompt, use_ner=use_ner)
         decision = decide(
             DecideInput(
                 prompt=prompt,
@@ -128,6 +129,7 @@ def analyze(
         "target_pct": target_pct,
         "n_cloud": n_cloud,
         "n_sensitive": int(result["sensitivity_flag"].sum()),
+        "use_ner": use_ner,
         "false_negative_to_small": false_negative_to_small,
         "false_negative_pct_of_eval": fn_pct_of_eval,
         "false_negative_pct_of_hard": fn_pct_of_hard,
@@ -155,7 +157,7 @@ def print_report(summary: dict) -> None:
         count = summary["target_counts"].get(target, 0)
         pct = summary["target_pct"].get(target, 0.0)
         print(f"  {target:12} {count:4d}  ({pct:5.1f}%)")
-    print(f"\nSensitive prompts (PII regex): {summary['n_sensitive']}")
+    print(f"\nSensitive prompts flagged: {summary['n_sensitive']}")
 
     print("\n" + "=" * 60)
     print("ERROR COST (hard prompts routed to small_local)")
@@ -201,12 +203,58 @@ def main() -> None:
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--avg-output-tokens", type=int, default=DEFAULT_AVG_OUTPUT_TOKENS)
+    parser.add_argument(
+        "--no-ner",
+        action="store_true",
+        help="Disable NER in sensitivity gate (regex-only baseline)",
+    )
+    parser.add_argument(
+        "--compare-ner",
+        action="store_true",
+        help="Print regex-only vs regex+NER comparison table",
+    )
     args = parser.parse_args()
+
+    if args.compare_ner:
+        _, baseline = analyze(
+            args.data, args.policy, avg_output_tokens=args.avg_output_tokens, use_ner=False
+        )
+        _, with_ner = analyze(
+            args.data, args.policy, avg_output_tokens=args.avg_output_tokens, use_ner=True
+        )
+        print("=" * 60)
+        print("NER COMPARISON (n=300 eval set)")
+        print("=" * 60)
+        print(f"{'Metric':<32} {'Regex only':>12} {'Regex+NER':>12}")
+        print("-" * 60)
+        for target in ("small_local", "large_local", "cloud"):
+            b = baseline["target_pct"].get(target, 0.0)
+            n = with_ner["target_pct"].get(target, 0.0)
+            print(f"{target + ' %':<32} {b:11.1f}% {n:11.1f}%")
+        print(f"{'cost savings %':<32} {baseline['savings_pct']:11.1f}% {with_ner['savings_pct']:11.1f}%")
+        print(
+            f"{'misroute rate (hard→small) %':<32} "
+            f"{baseline['false_negative_pct_of_eval']:11.1f}% "
+            f"{with_ner['false_negative_pct_of_eval']:11.1f}%"
+        )
+        print(
+            f"{'sensitive prompts flagged':<32} "
+            f"{baseline['n_sensitive']:11d} {with_ner['n_sensitive']:11d}"
+        )
+        ner_only_delta = with_ner["n_sensitive"] - baseline["n_sensitive"]
+        print(f"\nAdditional sensitive flags from NER: {ner_only_delta}")
+        if ner_only_delta == 0:
+            print(
+                "No change: eval prompts contain no NER-detectable entities "
+                "(names/locations/orgs) beyond what regex already catches."
+            )
+        return
 
     result, summary = analyze(
         args.data,
         args.policy,
         avg_output_tokens=args.avg_output_tokens,
+        use_ner=not args.no_ner,
     )
     result.to_csv(args.output, index=False, quoting=csv.QUOTE_ALL)
     print_report(summary)

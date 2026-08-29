@@ -8,4 +8,4 @@ def format_qwen_instruct_prompt(prompt: str) -> str:
         f"<|im_start|>assistant\n"
     )
 
-QWEN_STOP_SEQUENCES = ("", "<|endoftext|>")
+QWEN_STOP_SEQUENCES = ('<|im_end|>', "<|endoftext|>")

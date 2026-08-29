@@ -70,10 +70,19 @@ function renderHero(data, decisions) {
 
   document.getElementById("hero-section").innerHTML = `
     <div class="hero-primary">
-      <p class="hero-value">${savingsPct.toFixed(1)}%</p>
-      <p class="hero-label">api cost savings</p>
+      <div class="hero-metrics">
+        <div class="hero-metric">
+          <p class="hero-value">${savingsPct.toFixed(1)}%</p>
+          <p class="hero-label">api cost savings</p>
+        </div>
+        <span class="hero-equals" aria-hidden="true">=</span>
+        <div class="hero-metric">
+          <p class="hero-value">${formatUsd(cost.savings_usd)}</p>
+          <p class="hero-label">usd saved</p>
+        </div>
+      </div>
       <p class="hero-detail">
-        <strong>${formatUsd(cost.savings_usd)}</strong> vs always-cloud ·
+        vs always-cloud baseline ·
         <strong>${formatUsd(cost.per_1000_savings_usd)}</strong>/1k req
       </p>
     </div>

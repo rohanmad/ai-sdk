@@ -166,7 +166,11 @@ class Router:
             created=int(time.time()),
             model=result.model_id,
             choices=[
-                GenerateTextChoice(index=0, text=result.text, finish_reason="stop")
+                GenerateTextChoice(
+                    index=0,
+                    text=result.text,
+                    finish_reason=getattr(result, "finish_reason", "stop"),
+                )
             ],
             usage=GenerateTextUsage(
                 prompt_tokens=result.prompt_tokens,

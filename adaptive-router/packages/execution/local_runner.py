@@ -28,6 +28,7 @@ class LocalGenerateResult:
     model_id: str
     latency_ms: float
     mock: bool
+    finish_reason: str = "stop"
 
 
 class LocalRunner:
@@ -96,7 +97,7 @@ class LocalRunner:
         *,
         max_tokens: int,
         temperature: float,
-    ) -> tuple[str, dict]:
+    ) -> tuple[str, dict, str]:
         """Run inference with chat template (Qwen instruct models need this)."""
         if hasattr(model, "create_chat_completion"):
             output = model.create_chat_completion(
@@ -107,7 +108,8 @@ class LocalRunner:
             choice = output["choices"][0]
             message = choice.get("message") or {}
             text = (message.get("content") or choice.get("text") or "").strip()
-            return text, output.get("usage", {})
+            finish_reason = choice.get("finish_reason", "stop")
+            return text, output.get("usage", {}), finish_reason
 
         formatted = format_qwen_instruct_prompt(prompt)
         output = model(
@@ -117,8 +119,10 @@ class LocalRunner:
             echo=False,
             stop=list(QWEN_STOP_SEQUENCES),
         )
-        text = output["choices"][0]["text"].strip()
-        return text, output.get("usage", {})
+        choice = output["choices"][0]
+        text = choice["text"].strip()
+        finish_reason = choice.get("finish_reason", "stop")
+        return text, output.get("usage", {}), finish_reason
 
     def generate(
         self,
@@ -146,7 +150,7 @@ class LocalRunner:
                 mock=True,
             )
 
-        text, usage = self._generate_text(
+        text, usage, finish_reason = self._generate_text(
             model,
             prompt,
             max_tokens=max_tokens,
@@ -165,4 +169,5 @@ class LocalRunner:
             model_id=model_id,
             latency_ms=latency_ms,
             mock=False,
+            finish_reason=finish_reason,
         )

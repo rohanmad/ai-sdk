@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="chat-page">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/chat.css">
 </head>
-<body>
+<body class="chat-page">
   <div class="page-shell chat-shell">
     <header class="site-header">
       <div class="header-inner">
@@ -18,7 +18,7 @@
           <span class="brand-prefix">chat</span>
           <h1>Adaptive Router</h1>
         </div>
-        <p class="header-desc">Live routing demo — send a prompt, see where it runs</p>
+        <p class="header-desc">Live routing</p>
         <nav class="site-nav" aria-label="Main">
           <a href="/" class="nav-link">telemetry</a>
           <a href="/chat" class="nav-link is-active">chat</a>
@@ -26,10 +26,9 @@
       </div>
     </header>
 
-    <main class="chat-main">
-      <div id="messages" class="messages" aria-live="polite">
-        <div class="msg system">
-          <p>Messages route through the full pipeline: sensitivity gate → classifier → policy → execution. Expand routing details on each reply.</p>
+    <main class="chat-layout">
+      <div class="messages-scroll">
+        <div id="messages" class="messages" aria-live="polite">
         </div>
       </div>
 
