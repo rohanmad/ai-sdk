@@ -457,7 +457,6 @@ python -m telemetry.dashboard.web.app
 ## How to verify
 
 ```bash
-cd adaptive-router
 pip install -e ".[dev,local,ml,ner]"
 
 pytest -q
@@ -480,7 +479,6 @@ python packages/complexity_classifier/collect_data.py --limit 3 --max-tokens 32 
 ## File map
 
 ```
-adaptive-router/
 ├── config/
 │   ├── policy.yaml           ✅ production (classifier on, dumb off)
 │   └── policy.dumb.yaml      ✅ test / fallback (dumb routing on)

@@ -22,7 +22,7 @@ resolve_python() {
   cat >&2 <<'EOF'
 Error: Python not found.
 
-Install Python 3.10+ and dependencies from the adaptive-router directory:
+Install Python 3.10+ and dependencies from the repo root:
 
   python3 -m venv .venv
   source .venv/bin/activate
