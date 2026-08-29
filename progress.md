@@ -516,8 +516,3 @@ python packages/complexity_classifier/collect_data.py --limit 3 --max-tokens 32 
 
 ---
 
-## Resume bullets (fill in for applications)
-
-> Architected an adaptive inference-routing SDK that dynamically selects between local and cloud LLM execution based on real-time complexity and data-sensitivity classification, enforcing hard privacy constraints on sensitive requests.
-
-> Trained a complexity classifier (logistic regression, **76.7% accuracy**, **100% recall** on held-out set) to predict task difficulty pre-inference, labeling 150 prompts via embedding similarity between small and large local model outputs.

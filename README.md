@@ -1,150 +1,39 @@
-# Adaptive Inference Router SDK
+# Adaptive Router
 
-Routes each AI inference request to the right execution target — a small local model, a large local model, or a cloud API — based on **complexity** (how hard is the request) and **sensitivity** (whether data is allowed to leave the device).
+Send a prompt, get an answer. Behind the scenes, the router picks where inference runs: a small local model, a large local one, or a cloud API. It looks at how hard the request is and whether the text looks sensitive (emails, names, orgs, and similar).
 
-Same OpenAI-compatible interface regardless of where inference actually runs. Every routing decision is logged with a human-readable reason.
+One API call. Every decision is logged with a plain-English reason.
 
-## Routing policy (2×2)
+## How routing works
 
-|                  | LOW sensitivity        | HIGH sensitivity              |
-|------------------|------------------------|-------------------------------|
-| LOW complexity   | small local model      | small local model (forced)    |
-| HIGH complexity  | cloud (best model)     | large local (privacy wins)    |
+| | Not sensitive | Sensitive |
+|---|---|---|
+| **Easy prompt** | `small_local` | `small_local` |
+| **Hard prompt** | `cloud` | `large_local` |
 
-## Build status
-
-| Step | Component | Status |
-|------|-----------|--------|
-| 1 | Execution layer + dumb routing | **Done** |
-| 2 | Sensitivity gate (regex v1) | **Done** |
-| 3 | Routing decision engine | **Done** |
-| 4 | Collect labeled data | Scaffolded (`data/labeled_requests.csv`) |
-| 5 | Complexity classifier | Scaffolded (`features.py`, `train.py`) |
-| 6 | Telemetry + dashboard | **Done** (SQLite + CLI) |
-| 7 | v2 upgrades (NER, XGBoost, policy) | Partial (policy.yaml wired) |
+Sensitive data never goes to cloud when `never_cloud_for_high_sensitivity` is on in `config/policy.yaml`.
 
 ## Quick start
 
-### Python
-
 ```bash
-pip install -e ".[dev]"
-pytest
+pip install -e ".[dev,web]"
+pytest -q --ignore=tests/test_local_runner.py
 python scripts/demo.py "What is 2+2?"
-python scripts/demo.py "$(python -c 'print("x"*600)')"
 ```
 
-### TypeScript
+Open the dashboard and chat UI:
 
 ```bash
-cd packages/sdk
-npm install
-npm run demo
+python -m telemetry.dashboard.web.app
 ```
 
-Requires `python3` on PATH (or set `ADAPTIVE_ROUTER_PYTHON`).
+Telemetry: http://127.0.0.1:8765  
+Chat: http://127.0.0.1:8765/chat
 
-### Data collection (new machine)
-
-Collection scripts need Python 3.10+, local GGUF models, and ML deps. **Use a virtual environment** — system Python on many Linux/macOS installs blocks `pip install` with `externally-managed-environment`.
-
-```bash
-
-# One-time setup
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[local,ml,dev]"
-
-# Ensure models exist at paths in config/policy.yaml (see models/small/, models/large/)
-# Then run batch 2 collection (resumes automatically):
-./scripts/collect_batch2.sh 30
-```
-
-If `python` is not on your PATH (common on macOS), the scripts use `python3` automatically. To pin a specific interpreter:
-
-```bash
-PYTHON=/path/to/python3 ./scripts/collect_batch2.sh 30
-```
-
-Each prompt runs small + large models sequentially (~1–2 min/prompt). The RAM tip at startup is normal, not an error.
-
-### Download local GGUF models (~5.5 GB total)
-
-Models are **not** installed by pip. Download from Hugging Face (requires `huggingface_hub`, included in `[local]`):
-
-```bash
-mkdir -p models/small models/large
-
-# Small model (~1 GB)
-hf download Qwen/Qwen2.5-1.5B-Instruct-GGUF \
-  qwen2.5-1.5b-instruct-q4_k_m.gguf \
-  --local-dir models/small
-
-# Large model (~4.5 GB, 2 shards — llama.cpp loads both automatically)
-hf download Qwen/Qwen2.5-7B-Instruct-GGUF \
-  --include "qwen2.5-7b-instruct-q4_k_m-*" \
-  --local-dir models/large
-```
-
-Paths must match `config/policy.yaml` (first shard for the 7B model). If `hf` is not found: `pip install huggingface_hub` or use `huggingface-cli download` instead.
-
-## Architecture
-
-```
-Request (text + metadata)
-        |
-        v
-+-------------------+     +------------------------+
-| Sensitivity Gate   |     | Complexity Classifier   |
-| (regex PII rules)  |     | (placeholder / dumb)    |
-+---------+----------+     +-----------+--------------+
-          |                            |
-          +-------------+--------------+
-                         v
-                Routing Decision Engine
-                         |
-        +----------------+-----------------+
-        v                v                 v
-  Small local       Large local        Cloud API
-     model             model
-        |                |                 |
-        +----------------+-----------------+
-                         v
-                  Telemetry (SQLite)
-```
-
-## Step 1: dumb routing
-
-While the complexity classifier is not trained, `config/policy.yaml` enables **dumb routing**:
-
-- Prompts **&lt; 500 chars** → `small_local`
-- Prompts **≥ 500 chars** → `cloud` (unless sensitivity forces `large_local`)
-
-This proves both local and cloud execution paths work behind one API call.
-
-## Configuration
-
-Edit `config/policy.yaml` for hard rules, thresholds, and model paths:
-
-```yaml
-hard_rules:
-  never_cloud_for_high_sensitivity: true
-
-models:
-  small_local:
-    path: "/path/to/small.gguf"
-  large_local:
-    path: "/path/to/large.gguf"
-```
-
-Set `OPENAI_API_KEY` for real cloud inference. Without API keys or GGUF paths, the router runs in **mock mode** (useful for tests and CI).
-
-## API
-
-### Python
+## Python API
 
 ```python
-from packages.sdk.router import Router, RouterConfig
+from packages.sdk.router import Router
 from packages.sdk.types import GenerateTextRequest
 
 router = Router.init()
@@ -153,55 +42,37 @@ print(response.routing.target, response.routing.reason)
 print(response.choices[0].text)
 ```
 
-### TypeScript
+TypeScript bindings live in `packages/sdk` (`npm install && npm run demo`).
 
-```typescript
-import { Router } from "@adaptive-router/sdk";
+## Local models (optional)
 
-const router = Router.init();
-const response = await router.generateText({ prompt: "Hello!" });
-console.log(response.routing.target, response.routing.reason);
+GGUF models are not installed by pip. Download Qwen instruct weights into `models/small` and `models/large`, then point `config/policy.yaml` at them. Without model paths or `OPENAI_API_KEY`, the router runs in mock mode (fine for tests).
+
+```bash
+pip install -e ".[local]"
+mkdir -p models/small models/large
+hf download Qwen/Qwen2.5-1.5B-Instruct-GGUF qwen2.5-1.5b-instruct-q4_k_m.gguf --local-dir models/small
+hf download Qwen/Qwen2.5-7B-Instruct-GGUF --include "qwen2.5-7b-instruct-q4_k_m-*" --local-dir models/large
 ```
 
-## Sensitivity gate
+## Sensitivity gate (optional NER)
 
-Regex patterns (email, phone, SSN, credit-card) plus optional spaCy NER for names, locations, and organizations.
+Regex catches emails, phones, SSNs, and card-like patterns. Add spaCy NER for names, places, and organizations:
 
 ```bash
 pip install -e ".[ner]"
 python -m spacy download en_core_web_sm
 ```
 
-NER runs additively in `check_sensitivity()` — a prompt is sensitive if regex **or** NER flags it.
-
-## Telemetry
-
-Every request is logged to `telemetry/routing.db`:
-
-```bash
-python -m telemetry.dashboard.cli --mode summary
-python -m telemetry.dashboard.cli --limit 10
-python -m telemetry.dashboard.web.app   # telemetry at /, chat at /chat
-```
-
 ## Project layout
 
 ```
-├── packages/
-│   ├── sdk/                  # Python + TypeScript public API
-│   ├── sensitivity_gate/     # Regex PII + spaCy NER
-│   ├── complexity_classifier/# Feature extraction + training (step 5)
-│   ├── routing_engine/       # 2×2 policy logic
-│   └── execution/            # local_runner + cloud_adapter
-├── telemetry/                # SQLite logger + CLI dashboard
-├── config/policy.yaml
-├── data/labeled_requests.csv
-└── tests/
+packages/          SDK, routing engine, classifier, execution, sensitivity gate
+config/            policy.yaml
+telemetry/         SQLite logger + web dashboard
+data/              labeled prompts and eval outputs
+scripts/           demo, cost analysis, data collection
+tests/
 ```
 
-## Next steps
-
-1. Disable `dumb_routing` in policy.yaml once labeled data exists
-2. Run requests through small + large local models to expand `labeled_requests.csv`
-3. Train complexity classifier: `python packages/complexity_classifier/train.py`
-4. Optional: `pip install llama-cpp-python openai` for real inference
+More detail on training, eval numbers, and known limitations: see `progress.md`.
