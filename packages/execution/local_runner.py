@@ -5,9 +5,12 @@ from __future__ import annotations
 import gc
 import time
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
-from packages.execution.prompt_format import QWEN_STOP_SEQUENCES, format_qwen_instruct_prompt
+from packages.execution.prompt_format import (
+    QWEN_STOP_SEQUENCES,
+    format_qwen_chat_messages,
+)
 
 LocalModelTier = Literal["small", "large"]
 
@@ -69,14 +72,31 @@ class LocalRunner:
     def _estimate_tokens(self, text: str) -> int:
         return max(1, len(text.split()))
 
-    def _mock_generate(self, prompt: str, tier: LocalModelTier, max_tokens: int) -> str:
+    def _mock_generate(
+        self,
+        prompt: str,
+        tier: LocalModelTier,
+        max_tokens: int,
+        *,
+        turn_count: int = 1,
+    ) -> str:
         preview = prompt[:80].replace("\n", " ")
         if len(prompt) > 80:
             preview += "..."
+        turns = f"; turns={turn_count}" if turn_count > 1 else ""
         return (
             f"[mock-{tier}-local] Response to: {preview} "
-            f"(max_tokens={max_tokens})"
+            f"(max_tokens={max_tokens}{turns})"
         )
+
+    def _chat_messages(
+        self,
+        prompt: str,
+        messages: list[dict[str, str]] | None,
+    ) -> list[dict[str, str]]:
+        if messages:
+            return messages
+        return [{"role": "user", "content": prompt}]
 
     def unload(self, tier: LocalModelTier | None = None) -> None:
         """Release loaded model(s) to free memory."""
@@ -93,7 +113,7 @@ class LocalRunner:
     def _generate_text(
         self,
         model: Any,
-        prompt: str,
+        messages: list[dict[str, str]],
         *,
         max_tokens: int,
         temperature: float,
@@ -101,7 +121,7 @@ class LocalRunner:
         """Run inference with chat template (Qwen instruct models need this)."""
         if hasattr(model, "create_chat_completion"):
             output = model.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
@@ -111,7 +131,7 @@ class LocalRunner:
             finish_reason = choice.get("finish_reason", "stop")
             return text, output.get("usage", {}), finish_reason
 
-        formatted = format_qwen_instruct_prompt(prompt)
+        formatted = format_qwen_chat_messages(messages)
         output = model(
             formatted,
             max_tokens=max_tokens,
@@ -131,14 +151,23 @@ class LocalRunner:
         tier: LocalModelTier = "small",
         max_tokens: int = 256,
         temperature: float = 0.7,
+        messages: list[dict[str, str]] | None = None,
     ) -> LocalGenerateResult:
         start = time.perf_counter()
         model = self._load_model(tier)
         model_id = f"local-{tier}"
+        chat_messages = self._chat_messages(prompt, messages)
 
         if model is None:
-            text = self._mock_generate(prompt, tier, max_tokens)
-            prompt_tokens = self._estimate_tokens(prompt)
+            text = self._mock_generate(
+                prompt,
+                tier,
+                max_tokens,
+                turn_count=len(chat_messages),
+            )
+            prompt_tokens = self._estimate_tokens(
+                "\n".join(m["content"] for m in chat_messages)
+            )
             completion_tokens = self._estimate_tokens(text)
             latency_ms = (time.perf_counter() - start) * 1000
             return LocalGenerateResult(
@@ -152,11 +181,16 @@ class LocalRunner:
 
         text, usage, finish_reason = self._generate_text(
             model,
-            prompt,
+            chat_messages,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        prompt_tokens = int(usage.get("prompt_tokens", self._estimate_tokens(prompt)))
+        prompt_tokens = int(
+            usage.get(
+                "prompt_tokens",
+                self._estimate_tokens("\n".join(m["content"] for m in chat_messages)),
+            )
+        )
         completion_tokens = int(
             usage.get("completion_tokens", self._estimate_tokens(text))
         )
@@ -171,3 +205,50 @@ class LocalRunner:
             mock=False,
             finish_reason=finish_reason,
         )
+
+    def generate_stream(
+        self,
+        prompt: str,
+        *,
+        tier: LocalModelTier = "small",
+        max_tokens: int = 256,
+        temperature: float = 0.7,
+        messages: list[dict[str, str]] | None = None,
+    ) -> Iterator[str]:
+        chat_messages = self._chat_messages(prompt, messages)
+        model = self._load_model(tier)
+
+        if model is None:
+            text = self._mock_generate(
+                prompt,
+                tier,
+                max_tokens,
+                turn_count=len(chat_messages),
+            )
+            for word in text.split():
+                yield word + " "
+            return
+
+        if hasattr(model, "create_chat_completion"):
+            stream = model.create_chat_completion(
+                messages=chat_messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            for chunk in stream:
+                choice = chunk["choices"][0]
+                delta = choice.get("delta") or {}
+                content = delta.get("content") or ""
+                if content:
+                    yield content
+            return
+
+        result = self.generate(
+            prompt,
+            tier=tier,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=messages,
+        )
+        yield result.text

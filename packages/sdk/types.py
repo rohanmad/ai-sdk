@@ -15,6 +15,8 @@ class GenerateTextRequest:
     model: str | None = None
     max_tokens: int = 256
     temperature: float = 0.7
+    messages: list[dict[str, str]] | None = None
+    session_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

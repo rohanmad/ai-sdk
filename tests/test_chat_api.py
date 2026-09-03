@@ -81,3 +81,70 @@ def test_chat_page_served(chat_client: TestClient) -> None:
     response = chat_client.get("/chat")
     assert response.status_code == 200
     assert "Adaptive Router" in response.text
+
+
+def test_chat_accepts_message_history(chat_client: TestClient) -> None:
+    response = chat_client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Remember the number 42."},
+                {"role": "assistant", "content": "Got it."},
+                {"role": "user", "content": "What number did I mention?"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["text"]
+    assert "turns=3" in data["text"] or "42" in data["text"].lower()
+
+
+def test_chat_stream_returns_done_event(chat_client: TestClient) -> None:
+    response = chat_client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "Say hello"}],
+            "stream": True,
+        },
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "data: " in body
+    assert '"type": "done"' in body or '"type":"done"' in body
+
+
+def test_chat_session_sticks_target(chat_client: TestClient) -> None:
+    session_id = "test-session-stick-001"
+    first = chat_client.post(
+        "/api/chat",
+        json={
+            "session_id": session_id,
+            "messages": [{"role": "user", "content": "Short hello"}],
+        },
+    )
+    second = chat_client.post(
+        "/api/chat",
+        json={
+            "session_id": session_id,
+            "messages": [
+                {"role": "user", "content": "Short hello"},
+                {"role": "assistant", "content": "Hi"},
+                {
+                    "role": "user",
+                    "content": (
+                        "Design a distributed system with consensus, replication, "
+                        "and failure recovery across regions. "
+                        + ("detail " * 120)
+                    ),
+                },
+            ],
+        },
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_target = first.json()["target"]
+    second_data = second.json()
+    if first_target != "cloud":
+        assert second_data["target"] == first_target
+        assert "session:sticky" in second_data["reason"]

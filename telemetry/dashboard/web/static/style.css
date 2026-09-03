@@ -106,8 +106,22 @@ body {
   letter-spacing: 0.04em;
 }
 
-.nav-link:hover {
+.site-nav a:hover,
+.site-nav .nav-button:hover {
   color: var(--text-secondary);
+}
+
+.nav-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
 }
 
 .nav-link.is-active {
@@ -248,6 +262,54 @@ body {
   font-family: var(--font-mono);
   font-weight: 500;
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.quality-panel {
+  padding: 0.75rem 1rem 0.85rem;
+}
+
+.confidence-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.confidence-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr 3rem;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.confidence-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.confidence-range {
+  color: var(--text-muted);
+  text-transform: none;
+}
+
+.confidence-bar-wrap {
+  height: 8px;
+  border: 1px solid var(--border);
+  background: #0a0a0a;
+}
+
+.confidence-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.confidence-pct {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 

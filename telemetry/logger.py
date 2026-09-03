@@ -61,7 +61,8 @@ class TelemetryLogger:
             )
             conn.commit()
 
-    def log(self, entry: RoutingLogEntry) -> int:
+    def log(self, entry: RoutingLogEntry, *, created_at: float | None = None) -> int:
+        ts = created_at if created_at is not None else time.time()
         with self._connect() as conn:
             cursor = conn.execute(
                 """
@@ -73,7 +74,7 @@ class TelemetryLogger:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    time.time(),
+                    ts,
                     entry.request_id,
                     entry.target,
                     entry.reason,
@@ -182,10 +183,15 @@ class TelemetryLogger:
 
         cost = compute_cost_savings([dict(row) for row in cost_rows])
 
+        from telemetry.quality import load_eval_quality_metrics
+
+        quality = load_eval_quality_metrics()
+
         return {
             "total_requests": total,
             "by_target": by_target,
             "cost": cost,
+            "quality": quality,
             "pricing": {
                 "model": "gpt-4o-mini",
                 "input_price_per_1m": 0.15,

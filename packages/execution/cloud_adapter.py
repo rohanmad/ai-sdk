@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
+from typing import Iterator
 
 
 @dataclass
@@ -57,14 +58,31 @@ class CloudAdapter:
     def _estimate_tokens(self, text: str) -> int:
         return max(1, len(text.split()))
 
-    def _mock_generate(self, prompt: str, model: str, max_tokens: int) -> str:
+    def _mock_generate(
+        self,
+        prompt: str,
+        model: str,
+        max_tokens: int,
+        *,
+        turn_count: int = 1,
+    ) -> str:
         preview = prompt[:80].replace("\n", " ")
         if len(prompt) > 80:
             preview += "..."
+        turns = f"; turns={turn_count}" if turn_count > 1 else ""
         return (
             f"[mock-cloud:{model}] Response to: {preview} "
-            f"(max_tokens={max_tokens})"
+            f"(max_tokens={max_tokens}{turns})"
         )
+
+    def _chat_messages(
+        self,
+        prompt: str,
+        messages: list[dict[str, str]] | None,
+    ) -> list[dict[str, str]]:
+        if messages:
+            return messages
+        return [{"role": "user", "content": prompt}]
 
     def generate(
         self,
@@ -73,14 +91,23 @@ class CloudAdapter:
         model: str | None = None,
         max_tokens: int = 256,
         temperature: float = 0.7,
+        messages: list[dict[str, str]] | None = None,
     ) -> CloudGenerateResult:
         start = time.perf_counter()
         model_id = model or self.config.default_model
         client = self._get_client()
+        chat_messages = self._chat_messages(prompt, messages)
 
         if client is None:
-            text = self._mock_generate(prompt, model_id, max_tokens)
-            prompt_tokens = self._estimate_tokens(prompt)
+            text = self._mock_generate(
+                prompt,
+                model_id,
+                max_tokens,
+                turn_count=len(chat_messages),
+            )
+            prompt_tokens = self._estimate_tokens(
+                "\n".join(m["content"] for m in chat_messages)
+            )
             completion_tokens = self._estimate_tokens(text)
             latency_ms = (time.perf_counter() - start) * 1000
             return CloudGenerateResult(
@@ -94,7 +121,7 @@ class CloudAdapter:
 
         response = client.chat.completions.create(
             model=model_id,
-            messages=[{"role": "user", "content": prompt}],
+            messages=chat_messages,
             max_tokens=max_tokens,
             temperature=temperature,
         )
@@ -102,7 +129,11 @@ class CloudAdapter:
         text = choice.message.content or ""
         finish_reason = choice.finish_reason or "stop"
         usage = response.usage
-        prompt_tokens = usage.prompt_tokens if usage else self._estimate_tokens(prompt)
+        prompt_tokens = (
+            usage.prompt_tokens
+            if usage
+            else self._estimate_tokens("\n".join(m["content"] for m in chat_messages))
+        )
         completion_tokens = (
             usage.completion_tokens if usage else self._estimate_tokens(text)
         )
@@ -117,3 +148,39 @@ class CloudAdapter:
             mock=False,
             finish_reason=finish_reason,
         )
+
+    def generate_stream(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        max_tokens: int = 256,
+        temperature: float = 0.7,
+        messages: list[dict[str, str]] | None = None,
+    ) -> Iterator[str]:
+        model_id = model or self.config.default_model
+        client = self._get_client()
+        chat_messages = self._chat_messages(prompt, messages)
+
+        if client is None:
+            text = self._mock_generate(
+                prompt,
+                model_id,
+                max_tokens,
+                turn_count=len(chat_messages),
+            )
+            for word in text.split():
+                yield word + " "
+            return
+
+        stream = client.chat.completions.create(
+            model=model_id,
+            messages=chat_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                yield delta

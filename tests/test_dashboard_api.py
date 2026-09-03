@@ -61,6 +61,12 @@ def test_summary_returns_expected_shape(api_client: TestClient) -> None:
     assert "per_1000_savings_usd" in cost
     assert cost["total_always_cloud_usd"] > cost["total_router_cloud_usd"]
 
+    quality = data["quality"]
+    assert quality["available"] is True
+    assert "misroute_pct" in quality
+    assert "confidence_buckets" in quality
+    assert len(quality["confidence_buckets"]) == 3
+
 
 def test_decisions_paginates_correctly(api_client: TestClient) -> None:
     page1 = api_client.get("/api/decisions?limit=2&offset=0")

@@ -52,21 +52,24 @@ function renderEmptyState() {
     </div>
   `;
   document.getElementById("secondary-metrics").hidden = true;
+  const qualityPanel = document.getElementById("quality-metrics");
+  if (qualityPanel) {
+    qualityPanel.hidden = true;
+    qualityPanel.innerHTML = "";
+  }
   document.getElementById("target-chart").innerHTML =
     `<p class="loading">no data</p>`;
   document.getElementById("target-legend").innerHTML = "";
   document.getElementById("distribution-total").textContent = "";
 }
 
-function renderHero(data, decisions) {
+function renderHero(data) {
   const cost = data.cost || {};
   const savingsPct = cost.savings_pct ?? 0;
-
-  const total = decisions.length || data.total_requests || 0;
-  const risky = decisions.filter(
-    (row) => row.target === "small_local" && row.complexity_score >= 0.55
-  ).length;
-  const riskyPct = total ? (risky / total) * 100 : 0;
+  const quality = data.quality || {};
+  const misroutePct = quality.misroute_pct;
+  const evalCount = quality.eval_count ?? 0;
+  const avgConfidence = quality.avg_confidence;
 
   document.getElementById("hero-section").innerHTML = `
     <div class="hero-primary">
@@ -87,13 +90,56 @@ function renderHero(data, decisions) {
       </p>
     </div>
     <div class="hero-secondary">
-      <p class="hero-value">${riskyPct.toFixed(1)}%</p>
-      <p class="hero-label">high complexity → small_local</p>
+      <p class="hero-value">${misroutePct != null ? misroutePct.toFixed(1) : "—"}%</p>
+      <p class="hero-label">offline misroute rate</p>
       <p class="hero-detail">
-        <strong>${risky}</strong> / <strong>${total}</strong> requests flagged
+        hard → <strong>small_local</strong> ·
+        <strong>${quality.misroute_count ?? 0}</strong> / <strong>${evalCount}</strong> eval prompts
+        ${avgConfidence != null ? ` · avg conf <strong>${avgConfidence}</strong>` : ""}
       </p>
     </div>
   `;
+
+  renderQualityPanel(quality);
+}
+
+function renderQualityPanel(quality) {
+  const panel = document.getElementById("quality-metrics");
+  if (!panel) return;
+
+  if (!quality.available) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+
+  panel.hidden = false;
+  const buckets = quality.confidence_buckets || [];
+  panel.innerHTML = `
+    <div class="panel-head">
+      <h2>Classifier confidence (offline eval)</h2>
+      <span class="panel-meta">source: ${escapeHtml(quality.source || "eval")} · n=${evalCountLabel(quality.eval_count)}</span>
+    </div>
+    <div class="confidence-grid">
+      ${buckets
+        .map(
+          (bucket) => `
+            <div class="confidence-row">
+              <span class="confidence-label">${escapeHtml(bucket.label)} <span class="confidence-range">${escapeHtml(bucket.range)}</span></span>
+              <div class="confidence-bar-wrap">
+                <div class="confidence-bar-fill" style="width: ${Math.max(bucket.pct, bucket.pct > 0 ? 4 : 0)}%"></div>
+              </div>
+              <span class="confidence-pct">${bucket.pct.toFixed(1)}%</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function evalCountLabel(count) {
+  return count ?? 0;
 }
 
 function renderSecondaryMetrics(data) {

@@ -3,6 +3,11 @@ const messagesScrollEl = document.querySelector(".messages-scroll");
 const form = document.getElementById("chat-form");
 const input = document.getElementById("prompt-input");
 const sendBtn = document.getElementById("send-btn");
+const newChatBtn = document.getElementById("new-chat-btn");
+
+const MAX_HISTORY_MESSAGES = 30;
+let chatHistory = [];
+let chatSessionId = crypto.randomUUID();
 
 function escapeHtml(text) {
   const div = document.createElement("div");
@@ -121,8 +126,46 @@ function showThinkingIndicator() {
   };
 }
 
+async function consumeChatStream(response, bodyEl) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let doneData = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+    for (const part of parts) {
+      const line = part.trim();
+      if (!line.startsWith("data: ")) continue;
+      const event = JSON.parse(line.slice(6));
+      if (event.type === "token") {
+        bodyEl.textContent += event.text;
+        scrollToBottom();
+      } else if (event.type === "done") {
+        doneData = event;
+      } else if (event.type === "error") {
+        throw new Error(event.detail || event.error || "Inference failed");
+      }
+    }
+  }
+
+  if (!doneData) {
+    throw new Error("Stream ended before completion");
+  }
+  return doneData;
+}
+
 async function sendMessage(prompt) {
   appendMessage("user", `<p class="msg-body">${escapeHtml(prompt)}</p>`);
+  chatHistory.push({ role: "user", content: prompt });
+  if (chatHistory.length > MAX_HISTORY_MESSAGES) {
+    chatHistory = chatHistory.slice(-MAX_HISTORY_MESSAGES);
+  }
+
   const thinking = showThinkingIndicator();
   setLoading(true);
 
@@ -130,12 +173,18 @@ async function sendMessage(prompt) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        messages: chatHistory,
+        session_id: chatSessionId,
+        stream: true,
+      }),
     });
-    const data = await res.json();
+
     thinking.remove();
 
     if (!res.ok) {
+      chatHistory.pop();
+      const data = await res.json().catch(() => ({}));
       const detail = data.detail || data.error || res.statusText;
       appendMessage(
         "error",
@@ -144,11 +193,22 @@ async function sendMessage(prompt) {
       return;
     }
 
-    const assistant = appendMessage("assistant", "");
-    assistant.innerHTML = renderAssistantMessage(data);
+    const assistant = appendMessage(
+      "assistant",
+      '<p class="msg-body" data-stream-body></p>'
+    );
+    const bodyEl = assistant.querySelector("[data-stream-body]");
+    const doneData = await consumeChatStream(res, bodyEl);
+
+    assistant.innerHTML = renderAssistantMessage(doneData);
+    chatHistory.push({ role: "assistant", content: doneData.text });
+    if (chatHistory.length > MAX_HISTORY_MESSAGES) {
+      chatHistory = chatHistory.slice(-MAX_HISTORY_MESSAGES);
+    }
     scrollToBottom();
   } catch (err) {
     thinking.remove();
+    chatHistory.pop();
     appendMessage(
       "error",
       `<p class="msg-body">Network error: ${escapeHtml(err.message)}</p>`
@@ -159,6 +219,19 @@ async function sendMessage(prompt) {
   }
 }
 
+function resetChat() {
+  const previousSession = chatSessionId;
+  chatHistory = [];
+  chatSessionId = crypto.randomUUID();
+  messagesEl.innerHTML = "";
+  fetch("/api/chat/new", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: previousSession }),
+  }).catch(() => {});
+  input.focus();
+}
+
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const prompt = input.value.trim();
@@ -166,6 +239,10 @@ form.addEventListener("submit", (e) => {
   input.value = "";
   sendMessage(prompt);
 });
+
+if (newChatBtn) {
+  newChatBtn.addEventListener("click", resetChat);
+}
 
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {

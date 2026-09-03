@@ -9,6 +9,60 @@ SENSITIVE_ENTITY_LABELS: frozenset[str] = frozenset(
     {"PERSON", "GPE", "LOC", "ORG", "NORP"}
 )
 
+# Common tech/product terms spaCy mislabels as ORG/GPE in coding prompts.
+NER_ENTITY_BLOCKLIST: frozenset[str] = frozenset(
+    {
+        "python",
+        "sql",
+        "nosql",
+        "javascript",
+        "typescript",
+        "java",
+        "rust",
+        "go",
+        "github",
+        "gitlab",
+        "docker",
+        "kubernetes",
+        "aws",
+        "azure",
+        "gcp",
+        "chase",
+        "jordan",
+        "victor",
+        "oracle",
+        "redis",
+        "mongodb",
+        "postgres",
+        "mysql",
+        "react",
+        "vue",
+        "angular",
+        "linux",
+        "windows",
+        "macos",
+        "fahrenheit",
+        "celsius",
+        "api",
+        "http",
+        "https",
+        "json",
+        "yaml",
+        "ner",
+        "pii",
+        "gdpr",
+        "hipaa",
+        "oauth",
+        "jwt",
+        "html",
+        "css",
+        "tensorflow",
+        "pytorch",
+        "openai",
+        "chatgpt",
+    }
+)
+
 _NLP = None
 _NLP_UNAVAILABLE_REASON: str | None = None
 
@@ -21,7 +75,7 @@ def _load_nlp():
 
     try:
         import spacy
-    except ImportError as exc:
+    except ImportError:
         _NLP_UNAVAILABLE_REASON = (
             "spacy is not installed (pip install -e '.[ner]')"
         )
@@ -29,7 +83,7 @@ def _load_nlp():
 
     try:
         _NLP = spacy.load("en_core_web_sm")
-    except OSError as exc:
+    except OSError:
         _NLP_UNAVAILABLE_REASON = (
             "en_core_web_sm is not installed "
             "(python -m spacy download en_core_web_sm)"
@@ -71,6 +125,18 @@ def _is_plausible_entity(text: str) -> bool:
     return True
 
 
+def _is_blocked_ner_entity(text: str, label: str) -> bool:
+    token = text.strip().lower()
+    if token in NER_ENTITY_BLOCKLIST:
+        return True
+    for part in token.split():
+        if part in NER_ENTITY_BLOCKLIST:
+            return True
+    if text.isupper() and len(text) <= 6 and label in {"ORG", "GPE", "NORP"}:
+        return True
+    return False
+
+
 def check_ner_sensitivity(text: str) -> NerSensitivityResult:
     """Flag prompts containing PERSON, GPE, LOC, ORG, or NORP entities."""
     nlp = _NLP
@@ -92,6 +158,8 @@ def check_ner_sensitivity(text: str) -> NerSensitivityResult:
         if ent.label_ not in SENSITIVE_ENTITY_LABELS:
             continue
         if not _is_plausible_entity(ent.text):
+            continue
+        if _is_blocked_ner_entity(ent.text, ent.label_):
             continue
         key = (ent.label_, ent.text)
         if key in seen:
