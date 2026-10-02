@@ -75,4 +75,4 @@ scripts/           demo, cost analysis, data collection
 tests/
 ```
 
-More detail on training, eval numbers, and known limitations: see `progress.md`.
+More detail on training, evxxxxal numbers, and known limitations: see `progress.md`.
